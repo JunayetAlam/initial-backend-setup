@@ -1,8 +1,8 @@
 import { NextFunction, Request, Response } from "express";
-import { AnyZodObject } from "zod";
+import { ZodObject } from "zod";
 
 const body =
-  (schema: AnyZodObject) =>
+  (schema: ZodObject) =>
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         await schema.parseAsync({
@@ -14,7 +14,7 @@ const body =
       }
     };
 export const query =
-  (schema: AnyZodObject) =>
+  (schema: ZodObject) =>
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         await schema.parseAsync({

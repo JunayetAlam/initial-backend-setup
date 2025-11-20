@@ -127,19 +127,21 @@ const registerUserIntoDB = async (payload: User) => {
     emailVerificationTokenExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
   };
 
-  await prisma.$transaction(async (tx) => {
-    const newUser = await tx.user.create({
-      data: userData,
-    });
-
-    const verificationLink = `${config.base_url_client}/auth/verify-email?token=${verificationToken}`;
-
-    try {
-      sendLinkViaMail(newUser.email, verificationLink);
-    } catch {
-      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send verification email');
-    }
+  const newUser = await prisma.user.create({
+    data: userData,
   });
+
+  const verificationLink = `${config.base_url_client}/auth/verify-email?token=${verificationToken}`;
+
+  try {
+    sendLinkViaMail(newUser.email, verificationLink);
+  } catch {
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to send verification email'
+    );
+  }
+
 };
 
 const verifyEmail = async (payload: { token: string }) => {

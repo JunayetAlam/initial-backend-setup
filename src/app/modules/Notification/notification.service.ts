@@ -108,6 +108,7 @@ const getUsersByNotification = async (notificationId: string) => {
     },
   });
 
+
   return users.map(recipient => recipient.user);
 };
 

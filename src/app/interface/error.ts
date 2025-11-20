@@ -1,6 +1,6 @@
 export type TErrorDetails = {
   issues: {
-    path: string | number;
+    path: PropertyKey;
     message: string;
   }[];
 };

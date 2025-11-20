@@ -7,7 +7,7 @@ const handleZodError = (err: ZodError): TGenericErrorResponse => {
     issues: err.issues.map((issue: ZodIssue) => {
       message =
         message + issue.message == "Expected number, received string"
-          ? issue?.path[issue.path.length - 1] + " " + issue.message
+          ? issue?.path[issue.path.length - 1] as string + " " + issue.message
           : message + ". " + issue.message;
       return {
         path: issue?.path[issue.path.length - 1],

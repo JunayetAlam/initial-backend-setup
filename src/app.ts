@@ -5,6 +5,7 @@ import globalErrorHandler from "./app/middlewares/globalErrorHandler";
 import router from "./app/routes";
 import path from 'path';
 import { StripeWebHook } from "./app/utils/StripeUtils";
+import { html } from "./htmldesign";
 const app: Application = express();
 
 app.post(
@@ -31,10 +32,9 @@ app.use(express.json({ limit: "500mb" }));
 app.use(express.urlencoded({ limit: "500mb", extended: true }));
 
 app.get("/", (req: Request, res: Response) => {
-  res.send({
-    Message: "The server is running. . .",
-  });
+  res.send(html('Initial Project (Server)'));
 });
+
 
 app.use("/api/v1", router);
 

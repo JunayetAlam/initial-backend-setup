@@ -17,13 +17,17 @@ type TupleHasDuplicate<T extends readonly unknown[]> =
 type NoDuplicates<T extends readonly unknown[]> =
   TupleHasDuplicate<T> extends true ? never : T;
 
-const auth = <T extends readonly (UserRoleEnum | 'ANY')[]>(
+const auth = <T extends readonly (UserRoleEnum | 'ANY' | 'OPTIONAL')[]>(
   ...roles: NoDuplicates<T> extends never ? never : T
 ) => {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const token = req.headers.authorization;
       if (!token) {
+        if (roles.includes('OPTIONAL')) {
+          next();
+          return;
+        }
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
       }
 
@@ -48,7 +52,7 @@ const auth = <T extends readonly (UserRoleEnum | 'ANY')[]>(
       if (user.status === 'BLOCKED') {
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are Blocked!');
       }
-      
+
       if (user?.profile) {
         verifyUserToken.profile = user?.profile
       }

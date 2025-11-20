@@ -4,13 +4,15 @@ import seedSuperAdmin from './app/DB';
 import config from './config';
 import { Server } from 'socket.io';
 import { initSocket } from './app/utils/socket';
+import { customConsole } from './app/utils/customConsole';
 const port = config.port || 5000;
 
 async function main() {
   const server: HTTPServer = createServer(app).listen(port, () => {
-    console.log('Sever is running on port ', port);
+    customConsole(port, 'Initial Project (Server)')
     seedSuperAdmin();
   });
+
 
 
   const io = initSocket(server);

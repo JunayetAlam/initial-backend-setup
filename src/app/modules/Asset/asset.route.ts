@@ -4,13 +4,13 @@ import auth from '../../middlewares/auth';
 import { parseBody } from '../../middlewares/parseBody';
 import validateRequest from '../../middlewares/validateRequest';
 import { AssetValidation } from './asset.validation';
-import { upload } from '../../middlewares/upload';
+import { uploadMiddleware } from '../../middlewares/upload';
 const router = express.Router();
 
 // Single file upload
 router.post(
   '/upload',
-  upload.single('file'),
+  uploadMiddleware.single('file'),
   auth('ANY'),
 
   AssetController.uploadAsset
@@ -19,7 +19,7 @@ router.post(
 // Multiple files upload
 router.post(
   '/upload-multiple',
-  upload.array('files'),
+  uploadMiddleware.array('files'),
   auth('ANY'),
 
   AssetController.uploadMultipleAssets
@@ -37,28 +37,28 @@ router.delete(
 router.delete(
   '/delete-multiple',
   auth('ANY'),
-  validateRequest.body(AssetValidation.deleteMultipleAssetsSchema), 
+  validateRequest.body(AssetValidation.deleteMultipleAssetsSchema),
   AssetController.deleteMultipleAssets
 );
 
 // Update single asset
 router.put(
   '/update',
-  upload.single('file'),
+  uploadMiddleware.single('file'),
   auth('ANY'),
   parseBody,
-  validateRequest.body(AssetValidation.updateAssetSchema), 
+  validateRequest.body(AssetValidation.updateAssetSchema),
   AssetController.updateAsset
 );
 
 // Update multiple assets
 router.put(
   '/update-multiple',
-  upload.array('files'),
+  uploadMiddleware.array('files'),
   auth('ANY'),
 
   parseBody,
-  validateRequest.body(AssetValidation.updateMultipleAssetsSchema), 
+  validateRequest.body(AssetValidation.updateMultipleAssetsSchema),
   AssetController.updateMultipleAssets
 );
 

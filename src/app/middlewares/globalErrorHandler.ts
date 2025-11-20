@@ -1,12 +1,35 @@
 import {
-  PrismaClientKnownRequestError,
-  PrismaClientUnknownRequestError,
-  PrismaClientValidationError,
-} from '@prisma/client/runtime/library';
+  Prisma
+} from '@prisma/client';
 import { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import AppError from '../errors/AppError';
 import handleZodError from '../errors/handleZodError';
+
+const handlePrismaValidationError = (err: Prisma.PrismaClientValidationError) => {
+  const rawMessage = err.message || 'Prisma validation error occurred.';
+  let cleanMessage = 'Validation error in Prisma operation';
+  let suggestion = '';
+
+  const missingFieldMatch = rawMessage.match(/Argument `(\w+)` is missing/);
+  if (missingFieldMatch) {
+    const field = missingFieldMatch[1];
+    cleanMessage = `Prisma error: The "${field}" field is required in the create/update query.`;
+    suggestion = `Example: prisma.alert.create({ data: { ${field}: "Your value", ...otherFields } })`;
+  } else if (rawMessage.includes('Argument `data` is missing')) {
+    cleanMessage = 'Prisma error: The "data" property is required in create/update queries.';
+    suggestion = 'Example: prisma.alert.create({ data: { title: "Your title", ... } })';
+  } else if (rawMessage.includes('Unknown arg')) {
+    cleanMessage = 'Prisma error: You passed an invalid field to the query.';
+    suggestion = 'Check your field names in the `data` object.';
+  }
+
+  return {
+    statusCode: 400,
+    message: cleanMessage,
+    errorDetails: { fullError: rawMessage, suggestion },
+  };
+};
 
 const globalErrorHandler = (
   err: any,
@@ -20,52 +43,41 @@ const globalErrorHandler = (
   let errorDetails: Record<string, any> = {};
 
   if (err instanceof ZodError) {
-    // Handle Zod error
     const simplifiedError = handleZodError(err);
     statusCode = simplifiedError?.statusCode || 400;
     message = simplifiedError?.message || 'Validation error';
     errorDetails = simplifiedError?.errorDetails || {};
   } else if (err?.code === 'P2002') {
-    // Handle Prisma Duplicate entity error
     statusCode = 409;
-    message = `Duplicate entity on the fields: ${err.meta?.target?.split('_')[1]}`;
+    message = `Duplicate entity on the fields: ${err.meta?.target?.join(', ')}`;
     errorDetails = { code: err.code, target: err.meta?.target };
   } else if (err?.code === 'P2003') {
-    // Handle Prisma Foreign Key constraint error
     statusCode = 400;
     message = `Foreign key constraint failed on the field: ${err.meta?.field_name}`;
-    errorDetails = {
-      code: err.code,
-      field: err.meta?.field_name,
-      model: err.meta?.modelName,
-    };
+    errorDetails = { code: err.code, field: err.meta?.field_name, model: err.meta?.modelName };
   } else if (err?.code === 'P2011') {
-    // Handle Prisma Null constraint violation error
     statusCode = 400;
     message = `Null constraint violation on the field: ${err.meta?.field_name}`;
     errorDetails = { code: err.code, field: err.meta?.field_name };
   } else if (err?.code === 'P2025') {
-    // Handle Prisma Record not found error
+    console.log(err)
     statusCode = 404;
-    message = `Record not found: ${err.meta?.cause || 'No matching record found for the given criteria.'}`;
+    message = `${err?.meta?.modelName} Not Found!!`;
     errorDetails = { code: err.code, cause: err.meta?.cause };
-  } else if (err instanceof PrismaClientValidationError) {
-    // Handle Prisma Validation errors
-    statusCode = 400;
-    message = 'Validation error in Prisma operation';
-    errorDetails = { message: err.message };
-  } else if (err instanceof PrismaClientKnownRequestError) {
-    // Handle specific Prisma known errors
+  } else if (err instanceof Prisma.PrismaClientValidationError) {
+    const formatted = handlePrismaValidationError(err);
+    statusCode = formatted.statusCode;
+    message = formatted.message;
+    errorDetails = formatted.errorDetails;
+  } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     statusCode = 400;
     message = err.message;
     errorDetails = { code: err.code, meta: err.meta };
-  } else if (err instanceof PrismaClientUnknownRequestError) {
-    // Handle Prisma unknown errors
+  } else if (err instanceof Prisma.PrismaClientUnknownRequestError) {
     statusCode = 500;
     message = err.message;
     errorDetails = err;
   } else if (err instanceof AppError) {
-    // Handle custom AppError
     statusCode = err.statusCode;
     message = err.message;
     errorDetails = { stack: err.stack };
@@ -74,17 +86,17 @@ const globalErrorHandler = (
       statusCode = 401;
       message = 'Expired token';
       errorDetails = { stack: err.stack };
+    } else {
+      message = err.message;
+      errorDetails = { err, stack: err.stack };
     }
-  } else if (err instanceof Error) {
-    // Handle generic Error
-    message = err.message;
-    errorDetails = { err, stack: err.stack };
   }
 
   res.status(statusCode).json({
     success: false,
     message,
     errorDetails,
+    statusCode: statusCode
   });
 };
 

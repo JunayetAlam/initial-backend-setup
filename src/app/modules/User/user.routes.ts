@@ -4,7 +4,7 @@ import { UserControllers } from './user.controller';
 import { parseBody } from '../../middlewares/parseBody';
 import validateRequest from '../../middlewares/validateRequest';
 import { userValidation } from './user.validation';
-import { upload } from '../../utils/fileUploader';
+import { uploadMiddleware } from '../../middlewares/upload';
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ router.put(
 router.put(
   '/update-profile-image',
   auth('ANY'),
-  upload.single('file'),
+  uploadMiddleware.single('file'),
   UserControllers.updateProfileImage,
 );
 
