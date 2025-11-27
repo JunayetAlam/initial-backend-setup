@@ -2,9 +2,8 @@ import { createServer, Server as HTTPServer } from 'http';
 import app from './app';
 import seedSuperAdmin from './app/DB';
 import config from './config';
-import { Server } from 'socket.io';
-import { initSocket } from './app/utils/socket';
 import { customConsole } from './app/utils/customConsole';
+import { setupWebSocketServer } from './app/modules/Socket/socket.service';
 const port = config.port || 5000;
 
 async function main() {
@@ -13,20 +12,8 @@ async function main() {
     seedSuperAdmin();
   });
 
+  setupWebSocketServer(server);
 
-
-  const io = initSocket(server);
-
-  io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
-    socket.on('register', (userId: string) => {
-      socket.join(userId);
-      console.log(`User ${userId} joined their personal room`);
-    })
-    socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
-    });
-  });
 
   const exitHandler = () => {
     if (server) {
