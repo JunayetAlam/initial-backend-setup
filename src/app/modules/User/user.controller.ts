@@ -3,20 +3,22 @@ import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { UserServices } from './user.service';
 import { Request } from 'express';
+import { prisma } from '../../utils/prisma';
 
 const getAllUsers = catchAsync(async (req, res) => {
-  const result = await UserServices.getAllUsersFromDB(req.query);
+ const user = req.user;
+  const result = await UserServices.getAllUsersFromDB(req.query, user);
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: 'Users retrieved successfully',
-    ...result
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: 'Users retrieved successfully',
+      ...result
+    });
   });
-});
 
 const getMyProfile = catchAsync(async (req, res) => {
   const id = req.user.id;
-  const result = await UserServices.getMyProfileFromDB(id);
+  const result = await UserServices.getMyProfileFromDB(id, req.user.role);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -27,7 +29,7 @@ const getMyProfile = catchAsync(async (req, res) => {
 
 const getUserDetails = catchAsync(async (req, res) => {
   const { id } = req.params;
-  const result = await UserServices.getUserDetailsFromDB(id);
+  const result = await UserServices.getUserDetailsFromDB(id, req.user);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -54,7 +56,7 @@ const updateMyProfile = catchAsync(async (req: Request, res) => {
 const updateProfileImage = catchAsync(async (req: Request, res) => {
   const id = req.user.id;
   const file = req.file;
-  const previousImg = req.user.profile || '';
+  const previousImg = req.user.profilePhoto || '';
 
   const result = await UserServices.updateProfileImg(id, previousImg, req, file);
 
@@ -89,6 +91,27 @@ const updateUserStatus = catchAsync(async (req, res) => {
   });
 });
 
+
+const deleteMyProfileFromDB = catchAsync(async (req, res) => {
+  const id = req.user.id;
+  const result = await UserServices.deleteMyProfileFromDB(id);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Account deleted successfully',
+    data: result,
+  });
+});
+
+const undeletedUser = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const result = await UserServices.undeletedUser(id);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Account reactivated successfully',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   getAllUsers,
   getMyProfile,
@@ -97,4 +120,6 @@ export const UserControllers = {
   updateProfileImage,
   updateUserRoleStatus,
   updateUserStatus,
+  deleteMyProfileFromDB,
+  undeletedUser
 };

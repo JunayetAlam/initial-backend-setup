@@ -22,6 +22,12 @@ const loginUserFromDB = async (res: Response, payload: {
       email: payload.email,
     },
   });
+  if (userData.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
+  if (userData.status === 'BLOCKED') {
+    throw new AppError(httpStatus.FORBIDDEN, 'Account has been blocked');
+  }
   const isCorrectPassword: Boolean = await bcrypt.compare(
     payload.password,
     userData.password,
@@ -48,6 +54,14 @@ const refreshToken = async (email: string, user?: User) => {
         email: email,
       },
     });
+  }
+
+  if (userData.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
+
+  if (userData.status === 'BLOCKED') {
+    throw new AppError(httpStatus.FORBIDDEN, 'Account has been blocked');
   }
 
   if (userData.role === 'SUPERADMIN') {
@@ -104,25 +118,33 @@ const refreshToken = async (email: string, user?: User) => {
 }
 
 const registerUserIntoDB = async (payload: User) => {
+  if (payload.role == "SUPERADMIN") {
+    throw new AppError(httpStatus.NOT_ACCEPTABLE, "User can only pass User and Provider")
+  }
   const hashedPassword: string = await bcrypt.hash(payload.password, 12);
+
 
   const existingUser = await prisma.user.findFirst({
     where: {
-      OR: [
-        { email: payload.email },
-      ],
+      email: payload.email
     },
     select: {
       id: true,
       email: true,
+      isDeleted: true
     },
   });
 
   if (existingUser) {
-    if (existingUser.email === payload.email) {
+    if (existingUser.isDeleted) {
+      throw new AppError(httpStatus.CONFLICT, 'User already exists with the email and its deleted. Please contact support to reactivate your account');
+    } else {
       throw new AppError(httpStatus.CONFLICT, 'User already exists with the email');
     }
+
   }
+
+
 
 
   const otp = generateOTP();
@@ -143,10 +165,13 @@ const registerUserIntoDB = async (payload: User) => {
 
     sendOtp({ email: userData.email, otp });
 
-    return user;
+    return { user, otp: otp };
   });
 
-  return 'Please check your Email to verify your number'
+  return {
+    message: 'Please check your Email to verify your account',
+    otp
+  }
 
 };
 
@@ -195,6 +220,10 @@ const resendVerificationOtpToNumber = async (email: string) => {
     },
   });
 
+  if (user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
+
   if (user.status === 'BLOCKED') {
     throw new AppError(httpStatus.FORBIDDEN, 'User is blocked');
   }
@@ -222,11 +251,14 @@ const resendVerificationOtpToNumber = async (email: string) => {
 
     sendOtp({ email: user.email, otp });
 
-    return user;
+    return {
+      otp,
+      message: 'Verify Otp has sent to your email'
+    };
   });
 
 
-  return { message: 'Verification otp sent successfully. Please check your email.' };
+  return { message: 'Verification otp sent successfully. Please check your email.', otp, };
 };
 
 const changePassword = async (user: any, payload: {
@@ -239,6 +271,14 @@ const changePassword = async (user: any, payload: {
       status: 'ACTIVE',
     },
   });
+
+  if (userData.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
+
+  if (userData.status === 'BLOCKED') {
+    throw new AppError(httpStatus.FORBIDDEN, 'Account has been blocked');
+  }
 
   const isCorrectPassword: boolean = await bcrypt.compare(
     payload.oldPassword,
@@ -309,11 +349,15 @@ const resetPassword = async (payload: {
     throw new AppError(httpStatus.FORBIDDEN, 'Token is missing!')
   }
 
-  const userData = await prisma.user.findFirstOrThrow({
+  const userData = await insecurePrisma.user.findFirstOrThrow({
     where: {
       email: payload.email,
     },
   })
+
+  if (userData.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
 
   if (userData.status === 'BLOCKED') {
     throw new AppError(httpStatus.FORBIDDEN, 'User has blocked')
@@ -356,6 +400,15 @@ const forgetPassword = async (email: string) => {
     },
   });
 
+
+  if (user.isEmailVerified) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are not verified!')
+  }
+
+  if (user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
+
   if (user.status === 'BLOCKED') {
     throw new AppError(httpStatus.FORBIDDEN, 'User is blocked');
   }
@@ -380,10 +433,13 @@ const forgetPassword = async (email: string) => {
     sendOtp({ email: user.email, otp });
 
 
-    return user;
+    return {
+      message: 'Verify Otp has sent to your email',
+
+    };
   });
 
-  return { message: 'Verification otp sent successfully. Please check your inbox.' };
+  return { message: 'Verification otp sent successfully. Please check your inbox.', otp };
 };
 
 export const AuthServices = {

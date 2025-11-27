@@ -1,20 +1,29 @@
 import httpStatus from 'http-status';
-import {
-    deleteFile,
-    deleteFiles,
-    uploadFiles,
-    uploadSingleFile,
-    updateSingleFile,
-    updateFiles,
-} from '../../utils/uploadFiles';
+
 import AppError from '../../errors/AppError';
+import { deleteFromMinIO, uploadToMinIO } from '../../utils/uploadToMinio';
+
+interface ImageData {
+    name: string;
+    url: string;
+}
+
+export function getImageDataFromUrl(imageUrl: string): ImageData {
+    const parts = imageUrl.split("/");
+    const fileName = parts[parts.length - 1] || "unknown";
+
+    return {
+        name: fileName,
+        url: imageUrl,
+    };
+}
 
 const uploadAsset = async (file: Express.Multer.File | undefined) => {
     if (!file) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide at least one asset');
     }
-    const location = uploadSingleFile(file);
-    return location;
+    const location = await uploadToMinIO(file);
+    return getImageDataFromUrl(location);
 };
 
 const uploadMultipleAssets = async (files: Express.Multer.File[] | undefined) => {
@@ -22,17 +31,17 @@ const uploadMultipleAssets = async (files: Express.Multer.File[] | undefined) =>
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide at least one asset');
     }
     console.log(files)
-    const locations = uploadFiles(files);
-    return locations;
+    const locations = await uploadToMinIO(files);
+    return locations.map(item => getImageDataFromUrl(item));
 };
 
 const deleteAsset = async (path: string) => {
-    const success = deleteFile(path);
+    const success = deleteFromMinIO(path);
     return success;
 };
 
 const deleteMultipleAssets = async (paths: string[]) => {
-    const deleted = deleteFiles(paths);
+    const deleted = deleteFromMinIO(paths);
     return deleted;
 };
 
@@ -43,8 +52,9 @@ const updateAsset = async (
     if (!newFile) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide a new file to update the asset');
     }
-    const newLocation = updateSingleFile(oldPath, newFile);
-    return newLocation;
+    const newLocation = await uploadToMinIO(newFile);
+    deleteFromMinIO(oldPath)
+    return getImageDataFromUrl(newLocation);
 };
 
 const updateMultipleAsset = async (
@@ -54,8 +64,9 @@ const updateMultipleAsset = async (
     if (!newFiles || newFiles.length === 0) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide new files to update the assets');
     }
-    const newLocations = updateFiles(oldPaths, newFiles);
-    return newLocations;
+    const newLocations = await uploadToMinIO(newFiles);
+    deleteFromMinIO(oldPaths)
+    return newLocations.map(item => getImageDataFromUrl(item));
 };
 
 export const AssetService = {

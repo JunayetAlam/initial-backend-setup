@@ -12,6 +12,7 @@ export default {
   mail_password: process.env.MAIL_PASS,
   base_url_server: process.env.BASE_URL_SERVER,
   base_url_client: process.env.BASE_URL_CLIENT,
+  website_identifier: process.env.WEBSITE_IDENTIFIER || '',
   jwt: {
     access_secret: process.env.JWT_ACCESS_SECRET,
     access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,
@@ -23,6 +24,14 @@ export default {
     access_key: process.env.DO_SPACE_ACCESS_KEY,
     secret_key: process.env.DO_SPACE_SECRET_KEY,
     bucket: process.env.DO_SPACE_BUCKET
+  },
+  mi_space: {
+    endpoints: process.env.MI_SPACE_ENDPOINT,
+    access_key: process.env.MI_SPACE_ACCESS_KEY,
+    secret_key: process.env.MI_SPACE_SECRET_KEY,
+    bucket: process.env.MI_SPACE_BUCKET,
+    port: process.env.MI_PORT,
+    ssl: process.env.MI_USE_SSL,
   },
   stripe: {
     published_key: process.env.STRIPE_PUBLISHED_KEY,

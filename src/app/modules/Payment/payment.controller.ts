@@ -1,94 +1,120 @@
-import { Request, Response } from 'express';
 import httpStatus from 'http-status';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { PaymentService } from './payment.service';
 
-const getAllForAdmin = catchAsync(async (req: Request, res: Response) => {
-  const result = await PaymentService.getAllPayments(req.query);
+
+const handleBuySubscription = catchAsync(async (req, res) => {
+  const subscriptionId = req.body.subscriptionId;
+  const userId = req.user.id;
+  const email = req.user.email;
+  const role = req.user.role;
+
+  const result = await PaymentService.handleBuySubscription(subscriptionId, userId, email, role);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    success: true,
-    message: 'All payments retrieved successfully (Admin)',
-    ...result
-  });
-});
-
-const getAllForUser = catchAsync(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
-  const query = { ...req.query, userId };
-
-  const result = await PaymentService.getAllPayments(query);
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'All payments retrieved successfully (User)',
-    ...result
-  });
-});
-
-const getSingleForAdmin = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  const result = await PaymentService.singleTransactionHistory({ id });
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Single payment retrieved successfully (Admin)',
+    message: 'Subscription payment session created successfully',
     data: result,
   });
 });
 
-const getSingleForUser = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const userId = req.user?.id;
+// Renew expired/cancelled subscription
+const handleRenewSubscription = catchAsync(async (req, res) => {
+  const subscriptionId = req.body.subscriptionId; // Subscription package ID from your DB
+  const userId = req.user.id;
+  const email = req.user.email;
+  const role = req.user.role;
 
-  const result = await PaymentService.singleTransactionHistory({ id, userId });
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Single payment retrieved successfully (User)',
-    data: result,
-  });
-});
-const singleTransactionHistoryBySessionId = catchAsync(async (req: Request, res: Response) => {
-  const { stripeSessionId } = req.params;
-  const userId = req.user?.id;
-
-  const result = await PaymentService.singleTransactionHistoryBySessionId({ stripeSessionId, userId });
+  const result = await PaymentService.handleRenewSubscription(subscriptionId, userId, email, role);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    success: true,
-    message: 'Single payment retrieved successfully (User)',
+    message: 'Subscription renewal session created successfully',
     data: result,
   });
 });
 
-const cancelPayment = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const userId = req.user?.id;
-  const role = req.user.role
+// Get user's active subscriptions
+const getUserActiveSubscriptions = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+
+  const result = await PaymentService.getUserActiveSubscriptions(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Active subscriptions retrieved successfully',
+    data: result,
+  });
+});
+
+// Get all payments (superadmin -> all, others -> own)
+const getAllPayments = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const role = req.user.role;
+
+  const result = await PaymentService.getAllPayments(userId, role, req.query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Payments retrieved successfully',
+    data: result,
+  });
+});
+
+// Single transaction history by ID
+const singleTransactionHistory = catchAsync(async (req, res) => {
+  const query = {
+    id: req.params.id,
+    ...(req.user.role !== 'SUPERADMIN' && { userId: req.user.id }),
+  };
+
+  const result = await PaymentService.singleTransactionHistory(query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Transaction history retrieved successfully',
+    data: result,
+  });
+});
+
+// Single transaction history by Stripe sessionId
+const singleTransactionHistoryBySessionId = catchAsync(async (req, res) => {
+  const query = {
+    stripeSessionId: req.params.sessionId,
+    ...(req.user.role !== 'SUPERADMIN' && { userId: req.user.id }),
+  };
+
+  const result = await PaymentService.singleTransactionHistoryBySessionId(query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Transaction history retrieved successfully by sessionId',
+    data: result,
+  });
+});
+
+// Cancel payment
+const cancelPayment = catchAsync(async (req, res) => {
+  const id = req.params.id;
+  const userId = req.user.id;
+  const role = req.user.role;
 
   const result = await PaymentService.cancelPayment(id, userId, role);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    success: true,
-    message: 'Payment Cancel Successfully',
+    message: 'Payment cancelled successfully',
     data: result,
   });
 });
 
 export const PaymentController = {
-  getAllForAdmin,
-  getAllForUser,
-  getSingleForAdmin,
-  getSingleForUser,
+  handleBuySubscription,
+  handleRenewSubscription,
+  getUserActiveSubscriptions,
+  getAllPayments,
+  singleTransactionHistory,
+  singleTransactionHistoryBySessionId,
   cancelPayment,
-  singleTransactionHistoryBySessionId
 };

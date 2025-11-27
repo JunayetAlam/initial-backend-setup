@@ -1,84 +1,93 @@
-/* eslint-disable no-console */
-import {
-  DeleteObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
-import config from '../../config';
+import httpStatus from 'http-status';
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import fs from "fs";
+import config from "../../config";
+import { Readable } from "stream";
+import AppError from "../errors/AppError";
+import { nanoid } from 'nanoid';
 
-
-const accessKey = config.do_space.access_key;
-const bucket = config.do_space.bucket;
-const endpoints = config.do_space.endpoints;
-const secretKey = config.do_space.secret_key;
-interface UploadResponse {
-  Location: string;
-}
 
 const s3Client = new S3Client({
-  region: 'us-east-1', // Set any valid region
-  endpoint: `${endpoints}`,
+  region: "us-east-1",
+  endpoint: config.do_space.endpoints as string,
   credentials: {
-    accessKeyId: `${accessKey}`,
-    secretAccessKey: `${secretKey}`,
-  },
+    accessKeyId: config.do_space.access_key as string,
+    secretAccessKey: config.do_space.secret_key as string,
+  }
 });
 
-export const uploadToDigitalOceanAWS = async (
- file: Express.Multer.File,
-): Promise<UploadResponse> => {
-  
-  try {
-    // Ensure the file exists before uploading
-    // await fs.promises.access(file.path, fs.constants.F_OK);
+// --------------------- Types ---------------------
+export type MulterFile = Express.Multer.File;
+export type MulterFileInput<T extends MulterFile | MulterFile[]> =
+  T extends MulterFile[] ? MulterFile[] : MulterFile;
 
-    // const fileStream: Readable = fs.createReadStream(file.path);
+export const uploadToCloudStorage = async <T extends MulterFile | MulterFile[]>(
+  files: T,
+  folder = "uploads"
+): Promise<T extends MulterFile[] ? string[] : string> => {
+  const filesArray = Array.isArray(files) ? files : [files];
 
-    // Prepare the upload command
-    const command = new PutObjectCommand({
-      Bucket: `${bucket}`,
-      Key: `${file.originalname}`,
-      Body: file.buffer,
-      ACL: 'public-read',
-      ContentType: file.mimetype,
-    });
+  const uploadedUrls: string[] = [];
 
-    // Execute the upload
-    await s3Client.send(command);
+  for (const file of filesArray) {
+    try {
+      const fileStream: Readable = file.buffer
+        ? Readable.from(file.buffer)
+        : fs.createReadStream(file.path);
 
-    // Construct the direct URL to the uploaded file
-    const Location = `${endpoints}/${bucket}/${file.originalname}`;
+      const subFolder = file.mimetype.split("/")[0];
+      const key = `${file.originalname.split(/\.(?=[^\.]+$)/)[0]}_${nanoid(6)}}`;
 
-    return { Location };
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error(`Error uploading file`, error);
-    throw error;
+      const command = new PutObjectCommand({
+        Bucket: process.env.DO_SPACE_BUCKET!,
+        Key: key,
+        Body: fileStream,
+        ACL: "public-read",
+        ContentType: file.mimetype,
+        ContentLength: file.size,
+      });
+
+      await s3Client.send(command);
+
+      uploadedUrls.push(
+        `${process.env.DO_SPACE_ENDPOINT}/${process.env.DO_SPACE_BUCKET}/${key}`
+      );
+    } catch (error) {
+      console.log({ error });
+      console.error(`Error uploading file: ${file?.originalname}`, error);
+      throw new Error(`Failed to upload file: ${file?.originalname}`);
+    }
   }
+
+  // Return type based on input
+  return (Array.isArray(files) ? uploadedUrls : uploadedUrls[0]) as any;
 };
 
-export const deleteFromDigitalOceanAWS = async (
-  fileUrl: string,
+// --------------------- Delete ---------------------
+export const deleteFromCloudStorage = async (
+  fileInput: string | string[]
 ): Promise<void> => {
-  try {
-    // Extract the file key from the URL
-    const key = fileUrl.replace(
-      `${process.env.DO_SPACE_ENDPOINT}/${bucket}/`,
-      '',
-    );
+  const files = Array.isArray(fileInput) ? fileInput : [fileInput];
 
-    // Prepare the delete command
-    const command = new DeleteObjectCommand({
-      Bucket: `${bucket}`,
-      Key: key,
-    });
+  for (const fileUrl of files) {
+    try {
+      const key = fileUrl.replace(
+        `${process.env.DO_SPACE_ENDPOINT}/${process.env.DO_SPACE_BUCKET}/`,
+        ""
+      );
 
-    // Execute the delete command
-    await s3Client.send(command);
+      const command = new DeleteObjectCommand({
+        Bucket: process.env.DO_SPACE_BUCKET!,
+        Key: key,
+      });
 
-    console.log(`Successfully deleted file: ${fileUrl}`);
-  } catch (error: any) {
-    console.error(`Error deleting file: ${fileUrl}`, error);
-    throw new Error(`Failed to delete file: ${error?.message}`);
+      await s3Client.send(command);
+    } catch (error: any) {
+      console.error(`Error deleting file: ${fileUrl}`, error);
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Failed to delete file: ${error?.message}`
+      );
+    }
   }
 };

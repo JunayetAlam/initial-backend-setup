@@ -20,8 +20,8 @@ const registerUser = catchAsync(async (req, res) => {
   const message = await AuthServices.registerUserIntoDB(req.body);
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
-    message,
-    data: null,
+    message: 'User Register Successfully. Check your mail to verify',
+    data: message,
   });
 });
 
@@ -41,8 +41,7 @@ const resendVerificationOtpToNumber = catchAsync(async (req, res) => {
   const result = await AuthServices.resendVerificationOtpToNumber(email);
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: result.message,
-    data: null,
+    data: result,
   });
 });
 
@@ -51,8 +50,7 @@ const changePassword = catchAsync(async (req, res) => {
   const result = await AuthServices.changePassword(req.user, req.body);
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: result.message,
-    data: null,
+    data: result,
   });
 });
 
@@ -62,8 +60,7 @@ const forgetPassword = catchAsync(async (req, res) => {
   const result = await AuthServices.forgetPassword(email);
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: result.message,
-    data: null,
+    data: result,
   });
 });
 
@@ -83,8 +80,7 @@ const resetPassword = catchAsync(async (req, res) => {
   const result = await AuthServices.resetPassword(req.body, token);
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: result.message,
-    data: null,
+    data: result,
   });
 });
 const refreshToken = catchAsync(async (req, res) => {

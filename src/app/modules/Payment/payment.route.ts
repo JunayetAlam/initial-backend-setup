@@ -1,14 +1,40 @@
 import express from 'express';
-import { PaymentController } from './payment.controller';
 import auth from '../../middlewares/auth';
+import { PaymentController } from './payment.controller';
+import { parseBody } from '../../middlewares/parseBody';
+import validateRequest from '../../middlewares/validateRequest';
+import { PaymentValidation } from './payment.validation';
 
 const router = express.Router();
 
-router.get('/admin', auth('SUPERADMIN'), PaymentController.getAllForAdmin);
-router.post('/cancel/:id', auth('ANY'), PaymentController.cancelPayment);
-router.get('/admin/:id', auth('SUPERADMIN'), PaymentController.getSingleForAdmin);
-router.get('/', auth('USER'), PaymentController.getAllForUser);
-router.get('/:id', auth('USER'), PaymentController.getSingleForUser);
-router.get('/session/:stripeSessionId', auth('USER'), PaymentController.singleTransactionHistoryBySessionId);
+
+
+router.post(
+  '/buy-subscription',
+  auth('ANY'),
+  validateRequest.body(PaymentValidation.buySubscriptionSchema),
+  PaymentController.handleBuySubscription,
+);
+
+router.post(
+  '/renew-subscription',
+  auth('ANY'),
+  validateRequest.body(PaymentValidation.renewSubscriptionSchema),
+  PaymentController.handleRenewSubscription,
+);
+
+// Get user's active subscriptions
+router.get('/active-subscriptions', auth('ANY'), PaymentController.getUserActiveSubscriptions);
+
+// Payment history and management
+router.get('/', auth('ANY'), PaymentController.getAllPayments);
+
+router.get('/:id', auth('ANY'), PaymentController.singleTransactionHistory);
+
+router.get('/session/:sessionId', auth('ANY'), PaymentController.singleTransactionHistoryBySessionId);
+
+router.patch('/:id/cancel', auth('ANY'), PaymentController.cancelPayment);
+
+
 
 export const PaymentRoutes = router;

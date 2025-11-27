@@ -1,28 +1,33 @@
 model Payment {
-    id         String @id @default(auto()) @map("_id") @db.ObjectId
-    productId  String @unique @db.ObjectId
-    userId     String @db.ObjectId
-    categoryId String @db.ObjectId
+    id                    String  @id @default(auto()) @map("_id") @db.ObjectId
+    userId                String  @db.ObjectId
+    subscriptionPackageId String? @db.ObjectId
 
-    amount   Float
-    currency Currency      @default(usd)
-    status   PaymentStatus @default(PENDING)
+    paymentIntent        String?
+    paymentMethodType    String?
+    stripePaymentId      String?
+    stripeCustomerId     String?
+    stripeSubscriptionId String?
+    amount               Int
+    currency             String
 
-    paymentMethodType String?
-    cardBrand         String?
-    cardLast4         String?
-    cardExpMonth      Int?
-    cardExpYear       Int?
+    paymentStatus PaymentStatus @default(PENDING)
+    paymentType   PaymentType
 
-    stripePaymentId  String?
-    stripeSessionId  String? @unique
-    stripeCustomerId String?
+    stripeSessionId String? @unique
 
-    user     User     @relation(fields: [userId], references: [id])
+    user                User          @relation(fields: [userId], references: [id])
+    subscriptionPackage Subscription? @relation(fields: [subscriptionPackageId], references: [id])
+
+    startAt DateTime?
+    endAt   DateTime?
+
+    transactions Transaction[]
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
+    @@unique([userId, subscriptionPackageId])
     @@map("payments")
 }
 
@@ -30,5 +35,10 @@ enum PaymentStatus {
     PENDING
     SUCCESS
     FAILED
-    CANCELED
+    CANCELLED
+    EXPIRED
+}
+
+enum PaymentType {
+    SUBSCRIPTION
 }

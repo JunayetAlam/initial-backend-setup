@@ -62,7 +62,7 @@ const updateAsset = catchAsync(async (req, res) => {
 const updateMultipleAssets = catchAsync(async (req, res) => {
     const { oldPaths } = req.body;
     const files = req.files as Express.Multer.File[];
-    const { saved: urls } = await AssetService.updateMultipleAsset(oldPaths, files);
+    const urls = await AssetService.updateMultipleAsset(oldPaths, files);
 
     sendResponse(res, {
         statusCode: httpStatus.OK,

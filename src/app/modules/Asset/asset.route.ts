@@ -7,7 +7,6 @@ import { AssetValidation } from './asset.validation';
 import { uploadMiddleware } from '../../middlewares/upload';
 const router = express.Router();
 
-// Single file upload
 router.post(
   '/upload',
   uploadMiddleware.single('file'),
@@ -16,7 +15,6 @@ router.post(
   AssetController.uploadAsset
 );
 
-// Multiple files upload
 router.post(
   '/upload-multiple',
   uploadMiddleware.array('files'),
@@ -25,7 +23,6 @@ router.post(
   AssetController.uploadMultipleAssets
 );
 
-// Delete single asset
 router.delete(
   '/delete',
   auth('ANY'),
@@ -33,7 +30,6 @@ router.delete(
   AssetController.deleteAsset
 );
 
-// Delete multiple assets
 router.delete(
   '/delete-multiple',
   auth('ANY'),
@@ -41,7 +37,6 @@ router.delete(
   AssetController.deleteMultipleAssets
 );
 
-// Update single asset
 router.put(
   '/update',
   uploadMiddleware.single('file'),
@@ -51,7 +46,6 @@ router.put(
   AssetController.updateAsset
 );
 
-// Update multiple assets
 router.put(
   '/update-multiple',
   uploadMiddleware.array('files'),
