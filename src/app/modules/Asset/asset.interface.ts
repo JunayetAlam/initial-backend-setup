@@ -1,1 +1,0 @@
-// Define Asset interfaces here

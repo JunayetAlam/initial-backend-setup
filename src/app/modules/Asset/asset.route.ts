@@ -5,6 +5,7 @@ import { parseBody } from '../../middlewares/parseBody';
 import validateRequest from '../../middlewares/validateRequest';
 import { AssetValidation } from './asset.validation';
 import { uploadMiddleware } from '../../middlewares/upload';
+import { AssetService } from './asset.service';
 const router = express.Router();
 
 router.post(
@@ -12,7 +13,7 @@ router.post(
   uploadMiddleware.single('file'),
   auth('ANY'),
 
-  AssetController.uploadAsset
+  AssetService.upload
 );
 
 router.post(
@@ -20,21 +21,21 @@ router.post(
   uploadMiddleware.array('files'),
   auth('ANY'),
 
-  AssetController.uploadMultipleAssets
+  AssetService.uploadMultiple
 );
 
 router.delete(
   '/delete',
   auth('ANY'),
   validateRequest.body(AssetValidation.deleteAssetSchema),
-  AssetController.deleteAsset
+  AssetService.delete
 );
 
 router.delete(
   '/delete-multiple',
   auth('ANY'),
   validateRequest.body(AssetValidation.deleteMultipleAssetsSchema),
-  AssetController.deleteMultipleAssets
+  AssetService.deleteMultiple
 );
 
 router.put(
@@ -43,7 +44,7 @@ router.put(
   auth('ANY'),
   parseBody,
   validateRequest.body(AssetValidation.updateAssetSchema),
-  AssetController.updateAsset
+  AssetService.update
 );
 
 router.put(
@@ -53,7 +54,7 @@ router.put(
 
   parseBody,
   validateRequest.body(AssetValidation.updateMultipleAssetsSchema),
-  AssetController.updateMultipleAssets
+  AssetService.updateMultiple
 );
 
 export const AssetRouters = router;

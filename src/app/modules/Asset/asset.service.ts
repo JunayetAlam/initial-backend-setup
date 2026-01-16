@@ -2,6 +2,8 @@ import httpStatus from 'http-status';
 
 import AppError from '../../errors/AppError';
 import { deleteFromMinIO, uploadToMinIO } from '../../utils/uploadToMinio';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
 
 interface ImageData {
     name: string;
@@ -18,56 +20,92 @@ export function getImageDataFromUrl(imageUrl: string): ImageData {
     };
 }
 
-const uploadAsset = async (file: Express.Multer.File | undefined) => {
+
+const uploadAsset = catchAsync(async (req, res) => {
+    const file = req.file;
     if (!file) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide at least one asset');
     }
     const location = await uploadToMinIO(file);
-    return getImageDataFromUrl(location);
-};
+    const url = getImageDataFromUrl(location);
 
-const uploadMultipleAssets = async (files: Express.Multer.File[] | undefined) => {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'File uploaded successfully',
+        data: { url },
+    });
+});
+
+const uploadMultipleAssets = catchAsync(async (req, res) => {
+    const files = req.files as Express.Multer.File[] || undefined;
     if (!files || files.length === 0) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide at least one asset');
     }
     console.log(files)
     const locations = await uploadToMinIO(files);
-    return locations.map(item => getImageDataFromUrl(item));
-};
+    const urls = locations.map(item => getImageDataFromUrl(item));
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Files uploaded successfully',
+        data: { urls },
+    });
+});
 
-const deleteAsset = async (path: string) => {
+const deleteAsset = catchAsync(async (req, res) => {
+    const path = req.params.path;
     const success = deleteFromMinIO(path);
-    return success;
-};
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'File deleted successfully',
+        data: { success },
+    });
+});
 
-const deleteMultipleAssets = async (paths: string[]) => {
+const deleteMultipleAssets = catchAsync(async (req, res) => {
+    const paths = req.params.paths;
     const deleted = deleteFromMinIO(paths);
-    return deleted;
-};
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Files deleted successfully',
+        data: { deleted },
+    });
+});
 
-const updateAsset = async (
-    oldPath: string,
-    newFile: Express.Multer.File | undefined
-) => {
+const updateAsset = catchAsync(async (req, res) => {
+    const oldPath = req.body.oldPath;
+    const newFile = req.file;
     if (!newFile) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide a new file to update the asset');
     }
     const newLocation = await uploadToMinIO(newFile);
     deleteFromMinIO(oldPath)
-    return getImageDataFromUrl(newLocation);
-};
+    const url = getImageDataFromUrl(newLocation);
 
-const updateMultipleAsset = async (
-    oldPaths: string[],
-    newFiles: Express.Multer.File[] | undefined
-) => {
-    if (!newFiles || newFiles.length === 0) {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'File updated successfully',
+        data: { url },
+    });
+});
+
+
+const updateMultipleAssets = catchAsync(async (req, res) => {
+    const { oldPaths } = req.body;
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Provide new files to update the assets');
     }
-    const newLocations = await uploadToMinIO(newFiles);
+    const newLocations = await uploadToMinIO(files);
     deleteFromMinIO(oldPaths)
-    return newLocations.map(item => getImageDataFromUrl(item));
-};
+    const urls = newLocations.map(item => getImageDataFromUrl(item));
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Files updated successfully',
+        data: { urls },
+    });
+});
+
 
 export const AssetService = {
     upload: uploadAsset,
@@ -75,5 +113,5 @@ export const AssetService = {
     delete: deleteAsset,
     deleteMultiple: deleteMultipleAssets,
     update: updateAsset,
-    updateMultipleAsset,
+    updateMultiple: updateMultipleAssets,
 };

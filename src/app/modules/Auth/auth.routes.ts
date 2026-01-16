@@ -1,52 +1,52 @@
 import express from 'express';
 import validateRequest from '../../middlewares/validateRequest';
-import { AuthControllers } from './auth.controller';
 import { authValidation } from './auth.validation';
 import auth from '../../middlewares/auth';
+import { AuthServices } from './auth.service';
 
 const router = express.Router();
 
 router.post(
   '/login',
   validateRequest.body(authValidation.loginUser),
-  AuthControllers.loginUser,
+  AuthServices.loginUser,
 );
 
 router.post(
   '/register',
   validateRequest.body(authValidation.registerUser),
-  AuthControllers.registerUser,
+  AuthServices.registerUser,
 );
 
 router.post(
   '/verify-email',
   validateRequest.body(authValidation.verifyEmailValidationSchema),
-  AuthControllers.verifyEmail,
+  AuthServices.verifyEmail,
 );
 
 router.post(
   '/resend-verification-email',
   validateRequest.body(authValidation.resendVerificationEmailValidationSchema),
-  AuthControllers.resendUserVerificationEmail,
+  AuthServices.resendUserVerificationEmail,
 );
 
 router.post(
   '/change-password',
   auth('ANY'),
   validateRequest.body(authValidation.changePasswordValidationSchema),
-  AuthControllers.changePassword,
+  AuthServices.changePassword,
 );
 
 router.post(
   '/forget-password',
   validateRequest.body(authValidation.forgetPasswordValidationSchema),
-  AuthControllers.forgetPassword,
+  AuthServices.forgetPassword,
 );
 
 router.post(
   '/reset-password',
   validateRequest.body(authValidation.resetPasswordValidationSchema),
-  AuthControllers.resetPassword,
+  AuthServices.resetPassword,
 );
 
 export const AuthRouters = router;

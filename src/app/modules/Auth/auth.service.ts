@@ -11,11 +11,10 @@ import jwt from 'jsonwebtoken';
 import { verifyToken } from '../../utils/verifyToken';
 import sendResponse from '../../utils/sendResponse';
 import { sendLinkViaMail } from '../../utils/sendMail';
+import catchAsync from '../../utils/catchAsync';
 
-const loginUserFromDB = async (res: Response, payload: {
-  email: string;
-  password: string;
-}) => {
+const loginUser = catchAsync(async (req, res) => {
+  const payload = req.body;
   const userData = await insecurePrisma.user.findUniqueOrThrow({
     where: {
       email: payload.email,
@@ -75,17 +74,24 @@ const loginUserFromDB = async (res: Response, payload: {
       config.jwt.access_expires_in as SignOptions['expiresIn'],
     );
 
-    return {
+    const result = {
       id: userData.id,
       name: userData.firstName + ' ' + userData.lastName,
       email: userData.email,
       role: userData.role,
       accessToken: accessToken,
     };
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: 'User logged in successfully',
+      data: result,
+    });
   }
-};
+});
 
-const registerUserIntoDB = async (payload: User) => {
+
+const registerUser = catchAsync(async (req, res) => {
+  const payload = req.body;
   const hashedPassword: string = await bcrypt.hash(payload.password, 12);
 
   const isUserExistWithTheGmail = await prisma.user.findFirst({
@@ -142,9 +148,21 @@ const registerUserIntoDB = async (payload: User) => {
     );
   }
 
-};
 
-const verifyEmail = async (payload: { token: string }) => {
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    message: 'User registered successfully. Please check your email for the verification link.',
+    data: {
+      message: 'User registered successfully. Please check your email for the verification link.',
+    },
+  });
+});
+
+
+
+const verifyEmail = catchAsync(async (req, res) => {
+  const payload = req.body;
   if (!payload.token) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Verification token is required');
   }
@@ -202,49 +220,27 @@ const verifyEmail = async (payload: { token: string }) => {
     config.jwt.access_expires_in as SignOptions['expiresIn'],
   );
 
-  return {
+  const result = {
     id: user.id,
     name: user.firstName + ' ' + user.lastName,
     email: user.email,
     role: user.role,
     accessToken: accessToken,
   };
-};
 
-const changePassword = async (user: any, payload: any) => {
-  const userData = await insecurePrisma.user.findUniqueOrThrow({
-    where: {
-      email: user.email,
-      status: 'ACTIVE',
-    },
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Email verified successfully',
+    data: result,
   });
+});
 
-  const isCorrectPassword: boolean = await bcrypt.compare(
-    payload.oldPassword,
-    userData.password,
-  );
 
-  if (!isCorrectPassword) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Current password is incorrect');
-  }
 
-  const hashedPassword: string = await bcrypt.hash(payload.newPassword, 12);
 
-  await prisma.user.update({
-    where: {
-      id: userData.id,
-    },
-    data: {
-      password: hashedPassword,
-    },
-  });
-
-  return {
-    message: 'Password changed successfully!',
-  };
-};
-
-const resendUserVerificationEmail = async (email: string) => {
+const resendUserVerificationEmail = catchAsync(async (req, res) => {
+  const { email } = req.body;
   const user = await insecurePrisma.user.findUniqueOrThrow({
     where: { email: email },
   });
@@ -284,10 +280,62 @@ const resendUserVerificationEmail = async (email: string) => {
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send verification email');
   }
 
-  return { message: 'Verification link sent successfully. Please check your inbox.' };
-};
+  const result = { message: 'Verification link sent successfully. Please check your inbox.' };
 
-const forgetPassword = async (email: string) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Verification email sent successfully',
+    data: result,
+  });
+});
+
+
+
+const changePassword = catchAsync(async (req, res) => {
+  const user = req.user;
+  const payload = req.body;
+  const userData = await insecurePrisma.user.findUniqueOrThrow({
+    where: {
+      email: user.email,
+      status: 'ACTIVE',
+    },
+  });
+
+  const isCorrectPassword: boolean = await bcrypt.compare(
+    payload.oldPassword,
+    userData.password,
+  );
+
+  if (!isCorrectPassword) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Current password is incorrect');
+  }
+
+  const hashedPassword: string = await bcrypt.hash(payload.newPassword, 12);
+
+  await prisma.user.update({
+    where: {
+      id: userData.id,
+    },
+    data: {
+      password: hashedPassword,
+    },
+  });
+
+  const result = {
+    message: 'Password changed successfully!',
+  };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Password changed successfully',
+    data: result,
+  });
+});
+
+
+
+const forgetPassword = catchAsync(async (req, res) => {
+  const { email } = req.body;
   const userData = await prisma.user.findUniqueOrThrow({
     where: {
       email
@@ -351,13 +399,21 @@ const forgetPassword = async (email: string) => {
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to process password reset request');
   }
 
-  return { message: 'Password reset link sent successfully. Please check your inbox.' };
-};
+  const result = { message: 'Password reset link sent successfully. Please check your inbox.' };
 
-const resetPassword = async (payload: {
-  newPassword: string;
-  token: string
-}) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Password reset link has been sent to your email!',
+    data: result,
+  });
+});
+
+
+
+
+
+const resetPassword = catchAsync(async (req, res) => {
+  const payload = req.body;
   const token = payload.token
   if (!token) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Reset token is required');
@@ -400,12 +456,19 @@ const resetPassword = async (payload: {
     }
   });
 
-  return { message: 'Password reset successfully!' };
-};
+  const result = { message: 'Password reset successfully!' };
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Password reset successfully',
+    data: result,
+  });
+});
+
 
 export const AuthServices = {
-  loginUserFromDB,
-  registerUserIntoDB,
+  loginUser,
+  registerUser,
   verifyEmail,
   changePassword,
   resendUserVerificationEmail,
