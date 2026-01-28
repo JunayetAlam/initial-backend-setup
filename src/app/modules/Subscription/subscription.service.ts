@@ -5,8 +5,12 @@ import { prisma } from '../../utils/prisma';
 import { CreateSubscriptionPayload } from './subscription.interface';
 import config from '../../../config';
 import { updateSingleSubscription } from './update_subscription.service';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
 
-const createSubscription = async (payload: CreateSubscriptionPayload) => {
+const createSubscription = catchAsync(async (req, res) => {
+    const payload: CreateSubscriptionPayload = req.body;
+
     const stripeProduct = await stripe.products.create({
         name: payload.name,
         description: `Subscription plan: ${payload.name}`,
@@ -17,6 +21,7 @@ const createSubscription = async (payload: CreateSubscriptionPayload) => {
             createdAt: new Date().toISOString()
         }
     });
+
     const recurringConfig = getStripeRecurring(payload.billingCycle);
     const stripePrice = await stripe.prices.create({
         product: stripeProduct.id,
@@ -48,12 +53,15 @@ const createSubscription = async (payload: CreateSubscriptionPayload) => {
         },
     });
 
+    sendResponse(res, {
+        statusCode: httpStatus.CREATED,
+        message: 'Subscription created successfully',
+        data: subscription,
+    });
+});
 
-
-    return subscription;
-};
-
-const getAllSubscriptions = async (onlyIsVisible: boolean = false) => {
+const getAllSubscriptions = catchAsync(async (req, res) => {
+    const onlyIsVisible = false;
     const where = onlyIsVisible ? { isVisible: true, isDeleted: false } : { isDeleted: false };
 
     const subscriptions = await prisma.subscription.findMany({
@@ -61,10 +69,33 @@ const getAllSubscriptions = async (onlyIsVisible: boolean = false) => {
         orderBy: { createdAt: 'desc' }
     });
 
-    return subscriptions;
-};
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'All subscriptions retrieved successfully',
+        data: subscriptions,
+    });
+});
 
-const getSingle = async (id: string, includeAdminData: boolean = false) => {
+const getAllVisibleSubscriptions = catchAsync(async (req, res) => {
+    const onlyIsVisible = true;
+    const where = onlyIsVisible ? { isVisible: true, isDeleted: false } : { isDeleted: false };
+
+    const subscriptions = await prisma.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' }
+    });
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Visible subscriptions retrieved successfully',
+        data: subscriptions,
+    });
+});
+
+const getSingleSubscription = catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const includeAdminData = false;
+
     const subscription = await prisma.subscription.findUniqueOrThrow({
         where: {
             id,
@@ -74,11 +105,49 @@ const getSingle = async (id: string, includeAdminData: boolean = false) => {
         },
     });
 
-    return subscription;
-};
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Subscription retrieved successfully',
+        data: subscription,
+    });
+});
 
+const getSingleSubscriptionWithAdminData = catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const includeAdminData = true;
 
-const deleteSingle = async (id: string) => {
+    const subscription = await prisma.subscription.findUniqueOrThrow({
+        where: {
+            id,
+            ...(!includeAdminData ? {
+                isVisible: true,
+            } : {})
+        },
+    });
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Subscription with admin data retrieved successfully',
+        data: subscription,
+    });
+});
+
+const updateSubscription = catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const payload = req.body;
+
+    const result = await updateSingleSubscription(id, payload);
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Subscription updated successfully',
+        data: result,
+    });
+});
+
+const deleteSubscription = catchAsync(async (req, res) => {
+    const { id } = req.params;
+
     const existingSubscription = await prisma.subscription.findUnique({
         where: { id }
     });
@@ -87,12 +156,10 @@ const deleteSingle = async (id: string) => {
         throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found');
     }
 
-    // Deactivate in Stripe (don't delete)
     await stripe.products.update(existingSubscription.stripeProductId, {
         active: false
     });
 
-    // Deactivate all prices for this product in Stripe
     const prices = await stripe.prices.list({ product: existingSubscription.stripeProductId });
     for (const price of prices.data) {
         if (price.active) {
@@ -100,7 +167,6 @@ const deleteSingle = async (id: string) => {
         }
     }
 
-    // Deactivate in our database (soft delete)
     const deletedSubscription = await prisma.subscription.update({
         where: { id },
         data: {
@@ -108,14 +174,17 @@ const deleteSingle = async (id: string) => {
         }
     });
 
-    return {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
         message: 'Subscription deleted successfully',
-        id: deletedSubscription.id
-    };
-};
+        data: {
+            message: 'Subscription deleted successfully',
+            id: deletedSubscription.id
+        },
+    });
+});
 
-// Sync function to ensure database and Stripe are in sync
-const syncWithStripe = async () => {
+const syncSubscriptions = catchAsync(async (req, res) => {
     const subscriptions = await prisma.subscription.findMany({
         where: { stripeActive: true }
     });
@@ -135,14 +204,20 @@ const syncWithStripe = async () => {
         }
     }
 
-    return { message: 'Sync completed successfully' };
-};
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Subscriptions synced with Stripe successfully',
+        data: { message: 'Sync completed successfully' },
+    });
+});
 
-export const SubscriptionService = {
+export const SubscriptionServices = {
     createSubscription,
     getAllSubscriptions,
-    getSingle,
-    updateSingle: updateSingleSubscription,
-    deleteSingle,
-    syncWithStripe
+    getAllVisibleSubscriptions,
+    getSingleSubscription,
+    getSingleSubscriptionWithAdminData,
+    updateSubscription,
+    deleteSubscription,
+    syncSubscriptions,
 };

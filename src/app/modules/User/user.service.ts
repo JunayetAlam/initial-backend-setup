@@ -7,15 +7,17 @@ import AppError from '../../errors/AppError';
 import { JwtPayload } from 'jsonwebtoken';
 import { deleteFromCloudStorage, uploadToCloudStorage } from '../../utils/uploadToDigitalOceanAWS';
 import { uploadToMinIO } from '../../utils/uploadToMinio';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
 
+const getAllUsers = catchAsync(async (req, res) => {
+  const user = req.user;
+  const query: Record<string, unknown> = req.query;
 
-interface UserWithOptionalPassword extends Omit<User, 'password'> {
-  password?: string;
-}
-const getAllUsersFromDB = async (query: any, user: JwtPayload) => {
   if (user.role !== 'SUPERADMIN') {
     query.isDeleted = false;
   }
+
   const usersQuery = new QueryBuilder<typeof prisma.user>(prisma.user, query);
   const result = await usersQuery
     .search(['firstName', 'lastName', 'email'])
@@ -34,10 +36,17 @@ const getAllUsersFromDB = async (query: any, user: JwtPayload) => {
     .paginate()
     .execute();
 
-  return result;
-};
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Users retrieved successfully',
+    ...result
+  });
+});
 
-const getMyProfileFromDB = async (id: string, role: UserRoleEnum) => {
+const getMyProfile = catchAsync(async (req, res) => {
+  const id = req.user.id;
+  const role = req.user.role;
+
   const Profile = await prisma.user.findUniqueOrThrow({
     where: {
       id: id,
@@ -64,7 +73,12 @@ const getMyProfileFromDB = async (id: string, role: UserRoleEnum) => {
   });
 
   if (role === 'SUPERADMIN') {
-    return { ...Profile, hideSubscription: false }
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: 'Profile retrieved successfully',
+      data: { ...Profile, hideSubscription: false }
+    });
+    return;
   }
 
   const payments = Profile.payments
@@ -78,10 +92,18 @@ const getMyProfileFromDB = async (id: string, role: UserRoleEnum) => {
     endAt: exactPayment?.endAt || null,
     hideSubscription: false
   }
-  return result;
-};
 
-const getUserDetailsFromDB = async (id: string, user: JwtPayload) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Profile retrieved successfully',
+    data: result,
+  });
+});
+
+const getUserDetails = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const user = req.user;
+
   const result = await prisma.user.findUniqueOrThrow({
     where: {
       id,
@@ -97,13 +119,40 @@ const getUserDetailsFromDB = async (id: string, user: JwtPayload) => {
       ...(user.role === 'SUPERADMIN' && { isDeleted: true, createdAt: true, updatedAt: true, status: true, }),
     },
   });
-  return result;
-};
 
-const updateProfileImg = async (id: string, previousImg: string, req: Request, file: Express.Multer.File | undefined) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'User details retrieved successfully',
+    data: result,
+  });
+});
+
+const updateMyProfile = catchAsync(async (req: Request, res) => {
+  const id = req.user.id;
+  const payload = req.body;
+  delete payload.email;
+
+  const result = await prisma.user.update({
+    where: {
+      id
+    },
+    data: payload
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'User profile updated successfully',
+    data: result,
+  });
+});
+
+const updateProfileImage = catchAsync(async (req: Request, res) => {
+  const id = req.user.id;
+  const file = req.file;
+  const previousImg = req.user.profilePhoto || '';
 
   if (file) {
-    const location = await uploadToMinIO(file)
+    const location = await uploadToMinIO(file);
     const result = await prisma.user.update({
       where: {
         id
@@ -112,33 +161,28 @@ const updateProfileImg = async (id: string, previousImg: string, req: Request, f
         profilePhoto: location
       }
     });
+
     if (previousImg) {
-      deleteFromCloudStorage(previousImg)
+      deleteFromCloudStorage(previousImg);
     }
+
     req.user.profilePhoto = location;
-    return result
+
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: 'Profile image updated successfully',
+      data: result,
+    });
+    return;
   }
-  throw new AppError(httpStatus.NOT_FOUND, 'Please provide image')
-};
 
-const updateMyProfileIntoDB = async (
-  id: string,
+  throw new AppError(httpStatus.NOT_FOUND, 'Please provide image');
+});
 
-  payload: Partial<User>,
-) => {
-  delete payload.email
+const updateUserRoleStatus = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const role = req.body.role;
 
-
-  const result = await prisma.user.update({
-    where: {
-      id
-    },
-    data: payload
-  })
-  return result
-};
-
-const updateUserRoleStatusIntoDB = async (id: string, role: UserRoleEnum) => {
   const result = await prisma.user.update({
     where: {
       id: id,
@@ -147,9 +191,18 @@ const updateUserRoleStatusIntoDB = async (id: string, role: UserRoleEnum) => {
       role: role
     },
   });
-  return result;
-};
-const updateProfileStatus = async (id: string, status: UserStatus) => {
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'User role updated successfully',
+    data: result,
+  });
+});
+
+const updateUserStatus = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const status = req.body.status;
+
   const result = await prisma.user.update({
     where: {
       id
@@ -162,11 +215,18 @@ const updateProfileStatus = async (id: string, status: UserStatus) => {
       status: true,
       role: true
     },
-  })
-  return result
-}
+  });
 
-const deleteMyProfileFromDB = async (id: string) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'User status updated successfully',
+    data: result,
+  });
+});
+
+const deleteMyProfileFromDB = catchAsync(async (req, res) => {
+  const id = req.user.id;
+
   await prisma.user.update({
     where: {
       id
@@ -183,27 +243,39 @@ const deleteMyProfileFromDB = async (id: string) => {
       passwordResetTokenExpires: null,
     }
   });
-  return { message: 'Account deleted successfully' }
-}
 
-const undeletedUser = async (id: string) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Account deleted successfully',
+    data: { message: 'Account deleted successfully' },
+  });
+});
+
+const undeletedUser = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
   const result = await prisma.user.update({
     where: { id },
     data: {
       isDeleted: false,
     }
   });
-  return result;
-}
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Account reactivated successfully',
+    data: result,
+  });
+});
 
 export const UserServices = {
-  getAllUsersFromDB,
-  getMyProfileFromDB,
-  getUserDetailsFromDB,
-  updateMyProfileIntoDB,
-  updateUserRoleStatusIntoDB,
-  updateProfileStatus,
-  updateProfileImg,
+  getAllUsers,
+  getMyProfile,
+  getUserDetails,
+  updateMyProfile,
+  updateProfileImage,
+  updateUserRoleStatus,
+  updateUserStatus,
   deleteMyProfileFromDB,
   undeletedUser
 };

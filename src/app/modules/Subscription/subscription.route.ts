@@ -1,20 +1,20 @@
 import express from 'express';
-import { SubscriptionController } from './subscription.controller';
 import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { subscriptionValidation } from './subscription.validation';
+import { SubscriptionServices } from './subscription.service';
 
 const router = express.Router();
 
 // Public routes (visible subscriptions)
 router.get(
   '/',
-  SubscriptionController.getAllVisibleSubscriptions
+  SubscriptionServices.getAllVisibleSubscriptions
 );
 
 router.get(
   '/:id',
-  SubscriptionController.getSingleSubscription
+  SubscriptionServices.getSingleSubscription
 );
 
 // Admin routes (require SUPERADMIN authentication)
@@ -22,38 +22,38 @@ router.post(
   '/',
   auth('SUPERADMIN'),
   validateRequest.body(subscriptionValidation.createSubscription),
-  SubscriptionController.createSubscription
+  SubscriptionServices.createSubscription
 );
 
 router.get(
   '/admin/all',
   auth('SUPERADMIN'),
-  SubscriptionController.getAllSubscriptions
+  SubscriptionServices.getAllSubscriptions
 );
 
 router.get(
   '/admin/:id',
   auth('SUPERADMIN'),
-  SubscriptionController.getSingleSubscriptionWithAdminData
+  SubscriptionServices.getSingleSubscriptionWithAdminData
 );
 
 router.put(
   '/:id',
   auth('SUPERADMIN'),
   validateRequest.body(subscriptionValidation.updateSubscription),
-  SubscriptionController.updateSubscription
+  SubscriptionServices.updateSubscription
 );
 
 router.delete(
   '/:id',
   auth('SUPERADMIN'),
-  SubscriptionController.deleteSubscription
+  SubscriptionServices.deleteSubscription
 );
 
 router.post(
   '/sync/stripe',
   auth('SUPERADMIN'),
-  SubscriptionController.syncSubscriptions
+  SubscriptionServices.syncSubscriptions
 );
 
 export const SubscriptionRoutes = router;

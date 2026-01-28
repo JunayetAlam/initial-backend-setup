@@ -1,9 +1,8 @@
 import express from 'express';
 import auth from '../../middlewares/auth';
-import { PaymentController } from './payment.controller';
-import { parseBody } from '../../middlewares/parseBody';
 import validateRequest from '../../middlewares/validateRequest';
 import { PaymentValidation } from './payment.validation';
+import { PaymentServices } from './payment.service';
 
 const router = express.Router();
 
@@ -13,27 +12,27 @@ router.post(
   '/buy-subscription',
   auth('ANY'),
   validateRequest.body(PaymentValidation.buySubscriptionSchema),
-  PaymentController.handleBuySubscription,
+  PaymentServices.handleBuySubscription,
 );
 
 router.post(
   '/renew-subscription',
   auth('ANY'),
   validateRequest.body(PaymentValidation.renewSubscriptionSchema),
-  PaymentController.handleRenewSubscription,
+  PaymentServices.handleRenewSubscription,
 );
 
 // Get user's active subscriptions
-router.get('/active-subscriptions', auth('ANY'), PaymentController.getUserActiveSubscriptions);
+router.get('/active-subscriptions', auth('ANY'), PaymentServices.getUserActiveSubscriptions);
 
 // Payment history and management
-router.get('/', auth('ANY'), PaymentController.getAllPayments);
+router.get('/', auth('ANY'), PaymentServices.getAllPayments);
 
-router.get('/:id', auth('ANY'), PaymentController.singleTransactionHistory);
+router.get('/:id', auth('ANY'), PaymentServices.singleTransactionHistory);
 
-router.get('/session/:sessionId', auth('ANY'), PaymentController.singleTransactionHistoryBySessionId);
+router.get('/session/:sessionId', auth('ANY'), PaymentServices.singleTransactionHistoryBySessionId);
 
-router.patch('/:id/cancel', auth('ANY'), PaymentController.cancelPayment);
+router.patch('/:id/cancel', auth('ANY'), PaymentServices.cancelPayment);
 
 
 

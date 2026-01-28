@@ -1,22 +1,27 @@
-import { UserRoleEnum } from '@prisma/client';
 import httpStatus from 'http-status';
 import { prisma } from '../../utils/prisma';
 import AppError from '../../errors/AppError';
 import { subscriptionCheckout } from '../../utils/StripeUtils';
 import QueryBuilder from '../../builder/QueryBuilder';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
 
+const handleBuySubscription = catchAsync(async (req, res) => {
+    const subscriptionId = req.body.subscriptionId;
+    const userId = req.user.id;
+    const email = req.user.email;
+    const role = req.user.role;
 
-const handleBuySubscription = async (id: string, userId: string, email: string, role: UserRoleEnum) => {
     const subscription = await prisma.subscription.findUniqueOrThrow({
         where: {
-            id,
+            id: subscriptionId,
             isVisible: true
         }
     });
+
     if (!subscription) {
         throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found')
     };
-
 
     const isHaveSubscription = await prisma.payment.findFirst({
         where: {
@@ -28,14 +33,15 @@ const handleBuySubscription = async (id: string, userId: string, email: string, 
             paymentType: 'SUBSCRIPTION'
         }
     });
-    if(isHaveSubscription){
+
+    if (isHaveSubscription) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Already a subscription available!')
     }
 
     const isPaymentExist = await prisma.payment.findUnique({
         where: {
             userId_subscriptionPackageId: {
-                subscriptionPackageId: id,
+                subscriptionPackageId: subscriptionId,
                 userId: userId
             }
         },
@@ -46,42 +52,144 @@ const handleBuySubscription = async (id: string, userId: string, email: string, 
             paymentStatus: true
         }
     })
+
+    let url;
     if (isPaymentExist && isPaymentExist.paymentStatus === 'SUCCESS') {
         throw new AppError(httpStatus.BAD_REQUEST, 'Already paid')
     }
+
     if (isPaymentExist) {
-        const url = await subscriptionCheckout({
+        url = await subscriptionCheckout({
             email: email,
             paymentId: isPaymentExist.id,
             productId: subscription.stripeProductId,
             role: role
-
         })
-        return { url }
     } else {
         const paymentData = await prisma.payment.create({
             data: {
                 userId: userId,
-                subscriptionPackageId: id,
+                subscriptionPackageId: subscriptionId,
                 amount: subscription.price,
                 currency: 'sek',
                 paymentType: 'SUBSCRIPTION',
             }
         })
-        const url = await subscriptionCheckout({
+        url = await subscriptionCheckout({
             email: email,
             paymentId: paymentData.id,
             productId: subscription.stripeProductId,
             role: role
         })
-        return { url }
     }
-}
 
-const getAllPayments = async (userId: string, role: UserRoleEnum, query: Record<string, any>) => {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Subscription payment session created successfully',
+        data: { url },
+    });
+});
+
+const handleRenewSubscription = catchAsync(async (req, res) => {
+    const subscriptionId = req.body.subscriptionId;
+    const userId = req.user.id;
+    const email = req.user.email;
+    const role = req.user.role;
+
+    const subscription = await prisma.subscription.findUniqueOrThrow({
+        where: {
+            id: subscriptionId,
+            isVisible: true
+        }
+    });
+
+    if (!subscription) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found')
+    }
+
+    const expiredPayment = await prisma.payment.findFirst({
+        where: {
+            userId: userId,
+            subscriptionPackageId: subscriptionId,
+            paymentType: 'SUBSCRIPTION',
+            OR: [
+                { paymentStatus: 'EXPIRED' },
+                { paymentStatus: 'CANCELLED' },
+                {
+                    paymentStatus: 'SUCCESS',
+                    endAt: { lt: new Date() }
+                }
+            ]
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    if (!expiredPayment) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'No expired subscription found to renew')
+    }
+
+    const renewalPayment = await prisma.payment.create({
+        data: {
+            userId: userId,
+            subscriptionPackageId: subscriptionId,
+            amount: 10,
+            currency: 'sek',
+            paymentType: 'SUBSCRIPTION',
+        }
+    });
+
+    const url = await subscriptionCheckout({
+        email: email,
+        paymentId: renewalPayment.id,
+        productId: subscription.stripeProductId,
+        role: role
+    });
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Subscription renewal session created successfully',
+        data: { url },
+    });
+});
+
+const getUserActiveSubscriptions = catchAsync(async (req, res) => {
+    const userId = req.user.id;
+
+    const activeSubscriptions = await prisma.payment.findFirst({
+        where: {
+            userId: userId,
+            paymentType: 'SUBSCRIPTION',
+            paymentStatus: 'SUCCESS',
+            endAt: { gt: new Date() }
+        },
+        include: {
+            subscriptionPackage: {
+                select: {
+                    id: true,
+                    name: true,
+                    stripeProductId: true
+                }
+            }
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Active subscriptions retrieved successfully',
+        data: activeSubscriptions || {},
+    });
+});
+
+const getAllPayments = catchAsync(async (req, res) => {
+    const userId = req.user.id;
+    const role = req.user.role;
+    const query = req.query;
+
     if (role !== 'SUPERADMIN') {
         query.userId = userId
     }
+
     const paymentQuery = new QueryBuilder<typeof prisma.transaction>(prisma.transaction, query);
     const result = await paymentQuery
         .search(['user.name', 'user.email', 'vehicle.title', 'stripePaymentId', 'stripeSessionId'])
@@ -109,11 +217,8 @@ const getAllPayments = async (userId: string, role: UserRoleEnum, query: Record<
                     stripeSessionId: true,
                 }
             },
-
             createdAt: true,
-
             stripeSessionId: true,
-
             user: {
                 select: {
                     profilePhoto: true,
@@ -126,10 +231,20 @@ const getAllPayments = async (userId: string, role: UserRoleEnum, query: Record<
         .exclude()
         .paginate()
         .execute()
-    return result
-};
 
-const singleTransactionHistory = async (query: { id: string, userId?: string }) => {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Payments retrieved successfully',
+        data: result,
+    });
+});
+
+const singleTransactionHistory = catchAsync(async (req, res) => {
+    const query = {
+        id: req.params.id,
+        ...(req.user.role !== 'SUPERADMIN' && { userId: req.user.id }),
+    };
+
     const result = await prisma.transaction.findUnique({
         where: query,
         select: {
@@ -153,11 +268,8 @@ const singleTransactionHistory = async (query: { id: string, userId?: string }) 
                     stripeSubscriptionId: true,
                 }
             },
-
             createdAt: true,
-
             stripeSessionId: true,
-
             user: {
                 select: {
                     profilePhoto: true,
@@ -167,15 +279,25 @@ const singleTransactionHistory = async (query: { id: string, userId?: string }) 
                 }
             },
         }
-    }
-    );
+    });
+
     if (!result) {
         throw new AppError(httpStatus.NOT_FOUND, 'Transaction history not found')
     }
-    return result
-}
 
-const singleTransactionHistoryBySessionId = async (query: { stripeSessionId: string, userId?: string }) => {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Transaction history retrieved successfully',
+        data: result,
+    });
+});
+
+const singleTransactionHistoryBySessionId = catchAsync(async (req, res) => {
+    const query = {
+        stripeSessionId: req.params.sessionId,
+        ...(req.user.role !== 'SUPERADMIN' && { userId: req.user.id }),
+    };
+
     const result = await prisma.payment.findUnique({
         where: query,
         select: {
@@ -202,94 +324,24 @@ const singleTransactionHistoryBySessionId = async (query: { stripeSessionId: str
             },
         }
     });
+
     if (!result) {
         throw new AppError(httpStatus.NOT_FOUND, 'Transaction history not found')
     }
-    return result
-}
 
-const handleRenewSubscription = async (id: string, userId: string, email: string, role: UserRoleEnum) => {
-    const subscription = await prisma.subscription.findUniqueOrThrow({
-        where: {
-            id,
-            isVisible: true
-        }
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Transaction history retrieved successfully by sessionId',
+        data: result,
     });
+});
 
-    if (!subscription) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found')
-    }
+const cancelPayment = catchAsync(async (req, res) => {
+    const id = req.params.id;
+    const userId = req.user.id;
+    const role = req.user.role;
 
-
-
-    // Check if user has an expired or cancelled subscription for this package
-    const expiredPayment = await prisma.payment.findFirst({
-        where: {
-            userId: userId,
-            subscriptionPackageId: id,
-            paymentType: 'SUBSCRIPTION',
-            OR: [
-                { paymentStatus: 'EXPIRED' },
-                { paymentStatus: 'CANCELLED' },
-                {
-                    paymentStatus: 'SUCCESS',
-                    endAt: { lt: new Date() } // Subscription has ended
-                }
-            ]
-        },
-        orderBy: { createdAt: 'desc' }
-    });
-
-    if (!expiredPayment) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'No expired subscription found to renew')
-    }
-
-    // Create new payment for renewal
-    const renewalPayment = await prisma.payment.create({
-        data: {
-            userId: userId,
-            subscriptionPackageId: id,
-            amount: 10,
-            currency: 'sek',
-            paymentType: 'SUBSCRIPTION',
-        }
-    });
-
-    const url = await subscriptionCheckout({
-        email: email,
-        paymentId: renewalPayment.id,
-        productId: subscription.stripeProductId,
-        role: role
-    });
-
-    return { url };
-}
-
-const getUserActiveSubscriptions = async (userId: string) => {
-    const activeSubscriptions = await prisma.payment.findFirst({
-        where: {
-            userId: userId,
-            paymentType: 'SUBSCRIPTION',
-            paymentStatus: 'SUCCESS',
-            endAt: { gt: new Date() } // Still active
-        },
-        include: {
-            subscriptionPackage: {
-                select: {
-                    id: true,
-                    name: true,
-                    stripeProductId: true
-                }
-            }
-        },
-        orderBy: { createdAt: 'desc' }
-    });
-
-    return activeSubscriptions || {};
-}
-
-const cancelPayment = async (id: string, userId: string, role: UserRoleEnum) => {
-    return await prisma.payment.update({
+    const result = await prisma.payment.update({
         where: {
             id,
             ...(role !== 'SUPERADMIN' && { userId })
@@ -298,14 +350,20 @@ const cancelPayment = async (id: string, userId: string, role: UserRoleEnum) => 
             paymentStatus: 'CANCELLED'
         },
     })
-}
 
-export const PaymentService = {
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        message: 'Payment cancelled successfully',
+        data: result,
+    });
+});
+
+export const PaymentServices = {
+    handleBuySubscription,
+    handleRenewSubscription,
+    getUserActiveSubscriptions,
     getAllPayments,
     singleTransactionHistory,
     singleTransactionHistoryBySessionId,
     cancelPayment,
-    handleBuySubscription,
-    handleRenewSubscription,
-    getUserActiveSubscriptions,
 };
