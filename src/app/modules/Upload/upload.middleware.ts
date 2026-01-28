@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import multer from "multer";
-import { FileTypePattern } from "../interface/uploadFIle";
+import { FileTypePattern } from "./upload.interface";
 
 
 const storage = multer.memoryStorage();

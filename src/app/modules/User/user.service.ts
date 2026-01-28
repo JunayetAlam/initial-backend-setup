@@ -5,10 +5,9 @@ import { prisma } from '../../utils/prisma';
 import { Request } from 'express';
 import AppError from '../../errors/AppError';
 import { JwtPayload } from 'jsonwebtoken';
-import { deleteFromCloudStorage, uploadToCloudStorage } from '../../utils/uploadToDigitalOceanAWS';
-import { uploadToMinIO } from '../../utils/uploadToMinio';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
+import { deleteFromMinIO, uploadToMinIO } from '../Upload/uploadToMinio';
 
 const getAllUsers = catchAsync(async (req, res) => {
   const user = req.user;
@@ -163,7 +162,7 @@ const updateProfileImage = catchAsync(async (req: Request, res) => {
     });
 
     if (previousImg) {
-      deleteFromCloudStorage(previousImg);
+      deleteFromMinIO(previousImg);
     }
 
     req.user.profilePhoto = location;

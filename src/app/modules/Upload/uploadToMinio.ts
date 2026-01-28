@@ -1,8 +1,8 @@
 import * as Minio from 'minio';
-import config from '../../config';
 import { nanoid } from 'nanoid';
 import httpStatus from 'http-status';
-import AppError from '../errors/AppError';
+import config from '../../../config';
+import AppError from '../../errors/AppError';
 
 export const minioClient = new Minio.Client({
     endPoint: config.mi_space.endpoints as string,

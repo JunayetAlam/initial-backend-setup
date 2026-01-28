@@ -1,10 +1,10 @@
 import httpStatus from 'http-status';
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import fs from "fs";
-import config from "../../config";
 import { Readable } from "stream";
-import AppError from "../errors/AppError";
 import { nanoid } from 'nanoid';
+import config from '../../../config';
+import AppError from '../../errors/AppError';
 
 
 const s3Client = new S3Client({

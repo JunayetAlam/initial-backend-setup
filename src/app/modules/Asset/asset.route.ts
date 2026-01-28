@@ -3,7 +3,7 @@ import auth from '../../middlewares/auth';
 import { parseBody } from '../../middlewares/parseBody';
 import validateRequest from '../../middlewares/validateRequest';
 import { AssetValidation } from './asset.validation';
-import { uploadMiddleware } from '../../middlewares/upload';
+import { uploadMiddleware } from '../Upload/upload.middleware';
 import { AssetServices } from './asset.service';
 const router = express.Router();
 

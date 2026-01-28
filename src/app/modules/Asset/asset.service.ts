@@ -1,9 +1,9 @@
 import httpStatus from 'http-status';
 
 import AppError from '../../errors/AppError';
-import { deleteFromMinIO, uploadToMinIO } from '../../utils/uploadToMinio';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
+import { deleteFromMinIO, uploadToMinIO } from '../Upload/uploadToMinio';
 
 interface ImageData {
     name: string;

@@ -2,7 +2,7 @@ import express from 'express';
 import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { userValidation } from './user.validation';
-import { uploadMiddleware } from '../../middlewares/upload';
+import { uploadMiddleware } from '../Upload/upload.middleware';
 import { UserServices } from './user.service';
 
 const router = express.Router();
