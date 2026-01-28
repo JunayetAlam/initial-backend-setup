@@ -1,9 +1,9 @@
 import express from 'express';
 import auth from '../../middlewares/auth';
 import { UserRoleEnum } from '@prisma/client';
-import { notificationsControllers } from './notification.controller';
 import validateRequest from '../../middlewares/validateRequest';
 import { notificationValidation } from './notification.validation';
+import { NotificationServices } from './notification.service';
 
 export const NotificationsRouters = express.Router();
 
@@ -11,33 +11,33 @@ export const NotificationsRouters = express.Router();
 NotificationsRouters.get(
   '/',
   auth('ANY'),
-  notificationsControllers.getAllNotifications,
+  NotificationServices.getAllNotifications,
 );
 
 // Get all users by a specific notification ID
 NotificationsRouters.get(
   '/users/:notificationId',
   auth('SUPERADMIN'),
-  notificationsControllers.getUsersByNotification,
+  NotificationServices.getUsersByNotification,
 );
 
 // Mark a specific notification as read for the authenticated user
 NotificationsRouters.patch(
   '/read/:notificationId',
   auth('ANY'),
-  notificationsControllers.markNotificationAsRead,
+  NotificationServices.markNotificationAsRead,
 );
 
 // Get the unread notification count for the authenticated user
 NotificationsRouters.get(
   '/unread/count',
   auth('ANY'),
-  notificationsControllers.getUnreadNotificationCount,
+  NotificationServices.getUnreadNotificationCount,
 );
 
 // Mark all notifications as read for the authenticated user
 NotificationsRouters.patch(
   '/read-all',
   auth('ANY'),
-  notificationsControllers.markAllNotificationsAsRead,
+  NotificationServices.markAllNotificationsAsRead,
 );

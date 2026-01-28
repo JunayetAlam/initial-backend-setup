@@ -107,7 +107,7 @@ const updateMultipleAssets = catchAsync(async (req, res) => {
 });
 
 
-export const AssetService = {
+export const AssetServices = {
     upload: uploadAsset,
     uploadMultiple: uploadMultipleAssets,
     delete: deleteAsset,

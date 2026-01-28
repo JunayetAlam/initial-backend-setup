@@ -1,20 +1,16 @@
-import { NotificationType, NotificationUser, User } from '@prisma/client';
+import httpStatus from 'http-status';
+import { NotificationType } from '@prisma/client';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { getSocket } from '../../utils/socket';
 import { prisma } from '../../utils/prisma';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
 
-const createNotification = async (payload: {
-  title: string;
-  message: string;
-  type: NotificationType;
-  userIds: string[];
-  redirectEndpoint?: string
-}) => {
-  const { title, message, type, userIds, redirectEndpoint } = payload;
+const createNotification = catchAsync(async (req, res) => {
+  const { title, message, type, userIds, redirectEndpoint } = req.body;
 
   const io = getSocket();
 
-  // Create the notification
   const notification = await prisma.notification.create({
     data: {
       title,
@@ -24,9 +20,8 @@ const createNotification = async (payload: {
     },
   });
 
-  // Save notification recipients and emit socket events
   if (userIds.length > 0) {
-    const NotificationUsers = userIds.map(userId => ({
+    const NotificationUsers = userIds.map((userId: string) => ({
       notificationId: notification.id,
       userId,
     }));
@@ -35,28 +30,25 @@ const createNotification = async (payload: {
       data: NotificationUsers,
     });
 
-    userIds.forEach(id => {
-      console.log(`Emitting to user: ${id}`);
+    userIds.forEach((id: string) => {
       io.to(id).emit('notification', {
         ...notification,
         isRead: false,
       });
-      console.log(`Notification emitted to ${id}`);
     });
-
-    console.log(`Notification sent to ${userIds.length} users:`, userIds);
-  } else {
-    console.log('No users provided for notification');
   }
 
-  return notification;
-};
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Notification created successfully',
+    data: notification,
+  });
+});
 
-const getAllNotificationsByUser = async (
-  id: string,
-  query: Record<string, unknown>,
-) => {
-  query.userId = id;
+const getAllNotifications = catchAsync(async (req, res) => {
+  const query = req.query;
+  query.userId = req.user.id;
+
   const notificationQuery = new QueryBuilder(
     prisma.notificationUser,
     query,
@@ -95,10 +87,17 @@ const getAllNotificationsByUser = async (
       }
     })
     .execute();
-  return result
-};
 
-const getUsersByNotification = async (notificationId: string) => {
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Notifications retrieved successfully',
+    data: result,
+  });
+});
+
+const getUsersByNotification = catchAsync(async (req, res) => {
+  const { notificationId } = req.params;
+
   const users = await prisma.notificationUser.findMany({
     where: {
       notificationId: notificationId,
@@ -108,42 +107,52 @@ const getUsersByNotification = async (notificationId: string) => {
     },
   });
 
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Users by notification retrieved successfully',
+    data: users.map(recipient => recipient.user),
+  });
+});
 
-  return users.map(recipient => recipient.user);
-};
+const markNotificationAsRead = catchAsync(async (req, res) => {
+  const { notificationId } = req.params;
 
-const markNotificationAsRead = async (
-  notificationId: string,
-  userId: string,
-) => {
   const updatedRecipient = await prisma.notificationUser.updateMany({
     where: {
       notificationId: notificationId,
-      userId: userId,
+      userId: req.user.id,
     },
     data: {
       isRead: true,
     },
   });
 
-  return updatedRecipient;
-};
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Notification marked as read successfully',
+    data: updatedRecipient,
+  });
+});
 
-const getUnreadNotificationCount = async (userId: string) => {
+const getUnreadNotificationCount = catchAsync(async (req, res) => {
   const count = await prisma.notificationUser.count({
     where: {
-      userId: userId,
+      userId: req.user.id,
       isRead: false,
     },
   });
 
-  return count;
-};
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Unread notification count retrieved successfully',
+    data: count,
+  });
+});
 
-const markAllNotificationsAsRead = async (userId: string) => {
+const markAllNotificationsAsRead = catchAsync(async (req, res) => {
   const updatedRecipients = await prisma.notificationUser.updateMany({
     where: {
-      userId: userId,
+      userId: req.user.id,
       isRead: false,
     },
     data: {
@@ -151,12 +160,16 @@ const markAllNotificationsAsRead = async (userId: string) => {
     },
   });
 
-  return updatedRecipients;
-};
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'All notifications marked as read successfully',
+    data: updatedRecipients,
+  });
+});
 
-export const notificationServices = {
+export const NotificationServices = {
   createNotification,
-  getAllNotificationsByUser,
+  getAllNotifications,
   getUsersByNotification,
   markNotificationAsRead,
   getUnreadNotificationCount,
