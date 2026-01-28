@@ -1,5 +1,4 @@
 import express from 'express';
-import { AssetController } from './asset.controller';
 import auth from '../../middlewares/auth';
 import { parseBody } from '../../middlewares/parseBody';
 import validateRequest from '../../middlewares/validateRequest';

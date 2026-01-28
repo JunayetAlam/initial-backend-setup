@@ -1,8 +1,8 @@
 import express from 'express';
 import validateRequest from '../../middlewares/validateRequest';
-import { AuthControllers } from './auth.controller';
 import { authValidation } from './auth.validation';
 import auth from '../../middlewares/auth';
+import { AuthServices } from './auth.service';
 
 const router = express.Router();
 
@@ -10,33 +10,33 @@ const router = express.Router();
 router.post(
   '/login',
   validateRequest.body(authValidation.loginUser),
-  AuthControllers.loginUser
+  AuthServices.loginUser
 );
 
 // POST /auth/register
 router.post(
   '/register',
   validateRequest.body(authValidation.registerUser),
-  AuthControllers.registerUser
+  AuthServices.registerUser
 );
 router.post(
   '/refresh-token',
   auth('ANY'),
-  AuthControllers.refreshToken
+  AuthServices.refreshToken
 );
 
 // POST /auth/verify-email
 router.post(
   '/verify-email',
   validateRequest.body(authValidation.verifyEmail),
-  AuthControllers.verifyEmail
+  AuthServices.verifyEmail
 );
 
 // POST /auth/resend-verification-otp
 router.post(
   '/resend-verification-otp',
   validateRequest.body(authValidation.resendOtp),
-  AuthControllers.resendVerificationOtpToNumber
+  AuthServices.resendVerificationOtpToNumber
 );
 
 // PATCH /auth/change-password (requires auth)
@@ -44,28 +44,28 @@ router.patch(
   '/change-password',
   auth('ANY'),
   validateRequest.body(authValidation.changePassword),
-  AuthControllers.changePassword
+  AuthServices.changePassword
 );
 
 // POST /auth/forget-password
 router.post(
   '/forget-password',
   validateRequest.body(authValidation.forgetPassword),
-  AuthControllers.forgetPassword
+  AuthServices.forgetPassword
 );
 
 // POST /auth/verify-forgot-password-otp
 router.post(
   '/verify-forgot-password-otp',
   validateRequest.body(authValidation.verifyForgotOtp),
-  AuthControllers.verifyForgotPassOtp
+  AuthServices.verifyForgotPassOtp
 );
 
 // POST /auth/reset-password
 router.post(
   '/reset-password',
   validateRequest.body(authValidation.resetPassword),
-  AuthControllers.resetPassword
+  AuthServices.resetPassword
 );
 
 export const AuthByOtpRouters = router;

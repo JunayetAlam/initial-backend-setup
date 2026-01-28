@@ -11,12 +11,12 @@ import { generateToken } from '../../utils/generateToken';
 import { generateOTP, getOtpStatusMessage, otpExpiryTime } from '../../utils/otp';
 import { verifyOtp } from '../../utils/verifyOtp';
 import { sendOtp } from '../../utils/sendOtp';
+import catchAsync from '../../utils/catchAsync';
+import sendResponse from '../../utils/sendResponse';
+import { generateRefreshToken, resendOtpUtil } from './auth.utils';
 
-const loginUserFromDB = async (res: Response, payload: {
-  email: string;
-  password: string;
-}) => {
-
+const loginUser = catchAsync(async (req, res) => {
+  const payload = req.body;
   const userData = await insecurePrisma.user.findUniqueOrThrow({
     where: {
       email: payload.email,
@@ -37,87 +37,22 @@ const loginUserFromDB = async (res: Response, payload: {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password incorrect');
   }
   if (userData.role !== 'SUPERADMIN' && !userData.isEmailVerified) {
-    const result = await resendVerificationOtpToNumber(userData.email)
+    const result = await resendOtpUtil(userData.email)
     return result
   }
-  const result = await refreshToken(userData.email, userData);
-  return result
-};
-
-const refreshToken = async (email: string, user?: User) => {
-  let userData: User;
-  if (user) {
-    userData = user
-  } else {
-    userData = await insecurePrisma.user.findUniqueOrThrow({
-      where: {
-        email: email,
-      },
+  const result = await generateRefreshToken(userData.email, userData);
+  if (result) {
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: 'User logged in successfully',
+      data: result,
     });
   }
+});
 
-  if (userData.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
-  }
 
-  if (userData.status === 'BLOCKED') {
-    throw new AppError(httpStatus.FORBIDDEN, 'Account has been blocked');
-  }
-
-  if (userData.role === 'SUPERADMIN') {
-    const accessToken = await generateToken(
-      {
-        id: userData.id,
-        name: userData.firstName + userData.lastName,
-        email: userData.email,
-        role: userData.role,
-        // isPaid: true
-      },
-      config.jwt.access_secret as Secret,
-      config.jwt.access_expires_in as SignOptions['expiresIn'],
-    );
-    return {
-      id: userData.id,
-      role: userData.role,
-      accessToken: accessToken,
-      isPaid: true
-    };
-  }
-  // const payments = await prisma.payment.count({
-  //   where: {
-  //     subscriptionPackage: {
-  //       userType: {
-  //         has: userData.role
-  //       }
-  //     },
-  //     paymentType: 'SUBSCRIPTION',
-  //     paymentStatus: 'SUCCESS',
-  //     endAt: {
-  //       gte: new Date()
-  //     },
-  //     userId: userData.id
-  //   }
-  // });
-  const accessToken = await generateToken(
-    {
-      id: userData.id,
-      name: userData.firstName + userData.lastName,
-      email: userData.email,
-      role: userData.role,
-      // isPaid: payments > 0 ? true : false
-    },
-    config.jwt.access_secret as Secret,
-    config.jwt.access_expires_in as SignOptions['expiresIn'],
-  );
-  return {
-    id: userData.id,
-    role: userData.role,
-    accessToken: accessToken,
-    // isPaid: payments > 0 ? true : false
-  };
-}
-
-const registerUserIntoDB = async (payload: User) => {
+const registerUser = catchAsync(async (req, res) => {
+  const payload = req.body;
   if (payload.role == "SUPERADMIN") {
     throw new AppError(httpStatus.NOT_ACCEPTABLE, "User can only pass User and Provider")
   }
@@ -144,9 +79,6 @@ const registerUserIntoDB = async (payload: User) => {
 
   }
 
-
-
-
   const otp = generateOTP();
   const userData = {
     ...payload,
@@ -155,7 +87,7 @@ const registerUserIntoDB = async (payload: User) => {
     otpExpiry: otpExpiryTime(),
   }
 
-  const createdUser = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         ...userData,
@@ -168,15 +100,20 @@ const registerUserIntoDB = async (payload: User) => {
     return { user, otp: otp };
   });
 
-  return {
+  const result = {
     message: 'Please check your Email to verify your account',
     otp
   }
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    message: 'User Register Successfully. Check your mail to verify',
+    data: result.message,
+  });
+});
 
-};
-
-const verifyEmail = async (payload: { email: string; otp: string }) => {
-  const { userData } = await verifyOtp({ email: payload.email, otp: payload.otp }, 'USER_VERIFICATION');
+const verifyEmail = catchAsync(async (req, res) => {
+  const { email, otp } = req.body;
+  const { userData } = await verifyOtp({ email, otp }, 'USER_VERIFICATION');
   await prisma.user.update({
     where: {
       email: userData.email,
@@ -204,67 +141,32 @@ const verifyEmail = async (payload: { email: string; otp: string }) => {
     config.jwt.access_expires_in as SignOptions['expiresIn'],
   );
 
-  return {
+  const result = {
     id: userData.id,
     name: userData.firstName + userData.lastName,
     email: userData.email,
     role: userData.role,
     accessToken: accessToken,
   };
-}
-
-const resendVerificationOtpToNumber = async (email: string) => {
-  const user = await insecurePrisma.user.findFirstOrThrow({
-    where: {
-      email: email,
-    },
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Email verified successfully',
+    data: result,
   });
+});
 
-  if (user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
-  }
-
-  if (user.status === 'BLOCKED') {
-    throw new AppError(httpStatus.FORBIDDEN, 'User is blocked');
-  }
-  if (user.isEmailVerified) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Already verified')
-  }
-
-  // if (user.otp && user.otpExpiry && new Date(user.otpExpiry).getTime() > Date.now()) {
-  //   const message = getOtpStatusMessage(user.otpExpiry);
-  //   throw new AppError(httpStatus.CONFLICT, message)
-  // }
-
-
-  const otp = generateOTP();
-
-  const updatedUser = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({
-      where: { email: email },
-      data: {
-        otp,
-        otpExpiry: otpExpiryTime(),
-        otpFor: 'USER_VERIFICATION',
-      },
-    });
-
-    sendOtp({ email: user.email, otp });
-
-    return {
-      otp,
-      message: 'Verify Otp has sent to your email'
-    };
+const resendVerificationOtpToNumber = catchAsync(async (req, res) => {
+  const { email } = req.body;
+  const result = await resendOtpUtil(email);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    data: result,
   });
+});
 
-
-  return { message: 'Verification otp sent successfully. Please check your email.', otp, };
-};
-
-const changePassword = async (user: any, payload: {
-  oldPassword: string
-  newPassword: string
-}) => {
+const changePassword = catchAsync(async (req, res) => {
+  const { user } = req;
+  const payload = req.body;
   const userData = await insecurePrisma.user.findUniqueOrThrow({
     where: {
       email: user.email,
@@ -300,100 +202,17 @@ const changePassword = async (user: any, payload: {
     },
   });
 
-  return {
+  const result = {
     message: 'Password changed successfully!',
   };
-};
-
-
-
-const verifyForgotPassOtp = async (payload: { email: string; otp: string }) => {
-
-  const { userData } = await verifyOtp(payload, 'FORGOT_PASSWORD')
-
-
-  const resetToken = generateToken(
-    {
-      id: userData.id,
-      name: userData.firstName + userData.lastName,
-      email: userData.email,
-      role: userData.role,
-      // isPaid: false
-    },
-    config.jwt.access_secret as Secret,
-    '600s',
-  );
-
-
-  // Prisma transaction
-  await prisma.user.update({
-    where: {
-      email: payload.email,
-    },
-    data: {
-      otp: null,
-      otpExpiry: null,
-      passwordResetToken: resetToken,
-      otpFor: 'NOT'
-    },
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    data: result,
   });
+});
 
-  return { resetToken, expireInMinutes: 5 };
-}
-
-const resetPassword = async (payload: {
-  email: string;
-  newPassword: string;
-}, token: string) => {
-  if (!token) {
-    throw new AppError(httpStatus.FORBIDDEN, 'Token is missing!')
-  }
-
-  const userData = await insecurePrisma.user.findFirstOrThrow({
-    where: {
-      email: payload.email,
-    },
-  })
-
-  if (userData.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
-  }
-
-  if (userData.status === 'BLOCKED') {
-    throw new AppError(httpStatus.FORBIDDEN, 'User has blocked')
-  }
-
-  if (token !== userData.passwordResetToken) {
-    throw new AppError(httpStatus.FORBIDDEN, 'Invalid token')
-  }
-
-  const decoded = jwt.verify(token, config.jwt.access_secret as string) as JwtPayload
-
-  if (!decoded || !decoded.exp) {
-    throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token');
-  }
-
-  if (decoded.email !== payload.email) {
-    throw new AppError(httpStatus.FORBIDDEN, 'You are forbidden!')
-  }
-
-  const newHashedPassword = await bcrypt.hash(payload.newPassword, Number(config.bcrypt_salt_rounds))
-
-  await prisma.user.update({
-    where: {
-      email: payload.email
-    },
-    data: {
-      password: newHashedPassword,
-      passwordResetToken: null,
-      passwordResetTokenExpires: null,
-    }
-  })
-
-  return { message: 'Password reset successfully' };
-}
-
-const forgetPassword = async (email: string) => {
+const forgetPassword = catchAsync(async (req, res) => {
+  const { email } = req.body;
   const user = await insecurePrisma.user.findFirstOrThrow({
     where: {
       email: email,
@@ -439,12 +258,120 @@ const forgetPassword = async (email: string) => {
     };
   });
 
-  return { message: 'Verification otp sent successfully. Please check your inbox.', otp };
-};
+  const result = { message: 'Verification otp sent successfully. Please check your inbox.', otp };
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    data: result,
+  });
+});
+
+const verifyForgotPassOtp = catchAsync(async (req, res) => {
+  const payload = req.body;
+
+  const { userData } = await verifyOtp(payload, 'FORGOT_PASSWORD')
+
+
+  const resetToken = generateToken(
+    {
+      id: userData.id,
+      name: userData.firstName + userData.lastName,
+      email: userData.email,
+      role: userData.role,
+      // isPaid: false
+    },
+    config.jwt.access_secret as Secret,
+    '600s',
+  );
+
+
+  // Prisma transaction
+  await prisma.user.update({
+    where: {
+      email: payload.email,
+    },
+    data: {
+      otp: null,
+      otpExpiry: null,
+      passwordResetToken: resetToken,
+      otpFor: 'NOT'
+    },
+  });
+
+  const result = { resetToken, expireInMinutes: 5 };
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'OTP verified successfully',
+    data: result,
+  });
+});
+
+const resetPassword = catchAsync(async (req, res) => {
+  const payload = req.body;
+  const token = req.headers.authorization as string;
+  if (!token) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Token is missing!')
+  }
+
+  const userData = await insecurePrisma.user.findFirstOrThrow({
+    where: {
+      email: payload.email,
+    },
+  })
+
+  if (userData.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+  }
+
+  if (userData.status === 'BLOCKED') {
+    throw new AppError(httpStatus.FORBIDDEN, 'User has blocked')
+  }
+
+  if (token !== userData.passwordResetToken) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Invalid token')
+  }
+
+  const decoded = jwt.verify(token, config.jwt.access_secret as string) as JwtPayload
+
+  if (!decoded || !decoded.exp) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token');
+  }
+
+  if (decoded.email !== payload.email) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are forbidden!')
+  }
+
+  const newHashedPassword = await bcrypt.hash(payload.newPassword, Number(config.bcrypt_salt_rounds))
+
+  await prisma.user.update({
+    where: {
+      email: payload.email
+    },
+    data: {
+      password: newHashedPassword,
+      passwordResetToken: null,
+      passwordResetTokenExpires: null,
+    }
+  })
+
+  const result = { message: 'Password reset successfully' };
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    data: result,
+  });
+});
+
+const refreshToken = catchAsync(async (req, res) => {
+  const result = await generateRefreshToken(req.user.email);
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Token Refresh Successfully',
+    data: result,
+  });
+});
 
 export const AuthServices = {
-  loginUserFromDB,
-  registerUserIntoDB,
+  loginUser,
+  registerUser,
   changePassword,
   forgetPassword,
   resetPassword,
