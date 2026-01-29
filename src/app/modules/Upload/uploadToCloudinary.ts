@@ -91,6 +91,20 @@ export const uploadToCloudinary = async (
     }
 };
 
+export const uploadMultipleToCloudinary = async (
+    files: Express.Multer.File[]
+): Promise<UploadResponse[]> => {
+    const uploadPromises = files.map(file => uploadToCloudinary(file));
+
+    try {
+        const results = await Promise.all(uploadPromises);
+        return results;
+    } catch (error) {
+        console.error("Bulk upload failed", error);
+        throw error;
+    }
+};
+
 export const deleteFromCloudinary = async (
     fileUrl: string,
 ): Promise<void> => {
@@ -105,6 +119,17 @@ export const deleteFromCloudinary = async (
         console.log(`Deleted file: ${publicId}`);
     } catch (error: any) {
         console.error('Error deleting file:', error);
+    }
+};
+
+export const deleteMultipleByUrl = async (urls: string[]) => {
+    try {
+        const publicIds = urls.map(url => getPublicIdFromUrl(url));
+        const result = await cloudinary.api.delete_resources(publicIds);
+        return result;
+    } catch (error) {
+        console.error("Bulk deletion by URL failed:", error);
+        throw error;
     }
 };
 
