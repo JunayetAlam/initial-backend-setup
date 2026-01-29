@@ -48,7 +48,7 @@ const getCloudinaryConfig = (mimetype: string): { folder: string; resource_type:
     };
 };
 
-export const uploadToStorage = async (
+export const uploadToCloudinary = async (
     file: Express.Multer.File,
 ): Promise<UploadResponse> => {
     try {
@@ -91,7 +91,7 @@ export const uploadToStorage = async (
     }
 };
 
-export const deleteFromStorage = async (
+export const deleteFromCloudinary = async (
     fileUrl: string,
 ): Promise<void> => {
     try {
