@@ -16,7 +16,7 @@ const createSubscription = catchAsync(async (req, res) => {
         description: `Subscription plan: ${payload.name}`,
         active: payload.active ?? true,
         metadata: {
-            websiteId: config.website_identifier,
+            websiteId: config.project_name,
             billingCycle: payload.billingCycle,
             createdAt: new Date().toISOString()
         }

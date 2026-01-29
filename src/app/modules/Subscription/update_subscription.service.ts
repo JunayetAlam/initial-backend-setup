@@ -13,7 +13,7 @@ export const updateSingleSubscription = async (id: string, payload: Partial<Crea
             ...(payload.name && { name: payload.name }),
             ...(payload.active !== undefined && { active: payload.active }),
             metadata: {
-                websiteId: config.website_identifier,
+                websiteId: config.project_name,
                 billingCycle: payload.billingCycle || existingSubscription.billingCycle,
                 updatedAt: new Date().toISOString()
             }
@@ -22,7 +22,7 @@ export const updateSingleSubscription = async (id: string, payload: Partial<Crea
 
     let newStripePriceId = existingSubscription.stripePriceId;
 
-    if (payload.price !== undefined || payload.billingCycle !== undefined ) {
+    if (payload.price !== undefined || payload.billingCycle !== undefined) {
         const newStripePrice = await stripe.prices.create({
             product: existingSubscription.stripeProductId,
             unit_amount: Math.round((payload.price || existingSubscription.price) * 100),
