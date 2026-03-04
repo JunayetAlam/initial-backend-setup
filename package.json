@@ -11,7 +11,7 @@
     "dev": "ts-node-dev --respawn --transpile-only ./src/server.ts",
     "pm": "npx prisma migrate dev ",
     "pg": "npx prisma generate",
-    "generate-module": "ts-node generate-module.ts",
+    "gm": "ts-node gn-module.ts",
     "build": "tsc && npx prisma generate",
     "postinstall": "prisma generate",
     "lint:check": "eslint --ignore-path .eslintignore --ext .js,.ts .",
