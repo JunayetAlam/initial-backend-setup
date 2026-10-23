@@ -15,10 +15,11 @@ const buildLocalDatabaseUrl = () => {
   const user = process.env.POSTGRES_USER;
   const password = process.env.POSTGRES_PASSWORD;
   const port = process.env.POSTGRES_PORT;
+  const host = process.env.POSTGRES_HOST || 'localhost';
   if (!slug || !user || !password || !port) {
     return undefined;
   }
-  return `postgresql://${user}:${encodeURIComponent(password)}@localhost:${port}/${slug}?schema=public`;
+  return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${slug}?schema=public`;
 };
 
 if (!process.env.DATABASE_URL) {
@@ -28,11 +29,26 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
+const normalizeOrigin = (url: string) => url.trim().replace(/\/+$/, '');
+
+// BASE_URL_CLIENT may hold a comma-separated list; the first entry is the
+// primary client URL used for redirects and emails.
+const clientOrigins = (process.env.BASE_URL_CLIENT || '')
+  .split(',')
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+const cookieSameSite =
+  (process.env.COOKIE_SAMESITE as 'lax' | 'strict' | 'none') || 'lax';
+// Browsers reject SameSite=None cookies that are not Secure.
+const cookieSecure =
+  process.env.COOKIE_SECURE === 'true' || cookieSameSite === 'none';
+
 export default {
-  env: process.env.NODE_ENV,
+  env: process.env.NODE_ENV || 'development',
   project_name: process.env.PROJECT_NAME || '',
   project_slug: process.env.PROJECT_SLUG || '',
-  port: process.env.PORT,
+  port: process.env.PORT || 5000,
   database_url: process.env.DATABASE_URL,
   super_admin_password: process.env.SUPER_ADMIN_PASSWORD,
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
@@ -40,7 +56,8 @@ export default {
   mail_password: process.env.MAILTRAP_PASSWORD,
   mail_port: process.env.MAILTRAP_PORT,
   base_url_server: process.env.BASE_URL_SERVER,
-  base_url_client: process.env.BASE_URL_CLIENT,
+  base_url_client: clientOrigins[0],
+  client_origins: clientOrigins,
   jwt: {
     access_secret: process.env.JWT_ACCESS_SECRET,
     access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,
@@ -52,6 +69,9 @@ export default {
     idle_ms: 7 * 24 * 60 * 60 * 1000,
     absolute_ms: 30 * 24 * 60 * 60 * 1000,
     touch_after_ms: 60 * 60 * 1000,
+    secure: cookieSecure,
+    same_site: cookieSameSite,
+    domain: process.env.COOKIE_DOMAIN || undefined,
   },
   firebase: {
     type: process.env.FIREBASE_TYPE,

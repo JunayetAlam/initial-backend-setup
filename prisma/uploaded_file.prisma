@@ -1,0 +1,24 @@
+model UploadedFile {
+  id           String   @id @default(uuid())
+  originalName String   @map("original_name") @db.VarChar(255)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  url          String   @db.VarChar(1000)
+  mimeType     String?  @map("mime_type") @db.VarChar(150)
+  size         Int?
+  width        Int?
+  height       Int?
+  format       String?  @db.VarChar(50)
+  folderId     String?  @map("folder_id")
+  uploadedById String?  @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  folder     UploadedFolder? @relation("FolderFiles", fields: [folderId], references: [id], onDelete: Restrict)
+  uploadedBy User?           @relation("FileUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([folderId])
+  @@index([uploadedById])
+  @@index([createdAt])
+  @@index([mimeType])
+  @@map("uploaded_files")
+}

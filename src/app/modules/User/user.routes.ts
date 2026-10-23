@@ -7,7 +7,7 @@ import { UserServices } from './user.service';
 
 const router = express.Router();
 
-router.get('/', auth('SUPERADMIN'), UserServices.getAllUsers);
+router.get('/', auth('SUPERADMIN', 'ADMIN'), UserServices.getAllUsers);
 router.get('/me', auth('ANY'), UserServices.getMyProfile);
 
 router.get('/:id', auth('ANY'), UserServices.getUserDetails);
@@ -35,11 +35,10 @@ router.put(
 
 router.put(
   '/user-status/:id',
-  auth('SUPERADMIN'),
+  auth('SUPERADMIN', 'ADMIN'),
   validateRequest.body(userValidation.updateUserStatus),
   UserServices.updateUserStatus,
 );
-
 
 router.delete(
   '/delete-my-profile',
@@ -49,7 +48,7 @@ router.delete(
 
 router.put(
   '/undelete-user/:id',
-  auth('SUPERADMIN'),
+  auth('SUPERADMIN', 'ADMIN'),
   UserServices.undeletedUser,
 );
 

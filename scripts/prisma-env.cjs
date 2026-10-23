@@ -17,7 +17,8 @@ if (!process.env.DATABASE_URL) {
   const user = process.env.POSTGRES_USER;
   const password = process.env.POSTGRES_PASSWORD;
   const port = process.env.POSTGRES_PORT;
+  const host = process.env.POSTGRES_HOST || 'localhost';
   if (slug && user && password && port) {
-    process.env.DATABASE_URL = `postgresql://${user}:${encodeURIComponent(password)}@localhost:${port}/${slug}?schema=public`;
+    process.env.DATABASE_URL = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${slug}?schema=public`;
   }
 }

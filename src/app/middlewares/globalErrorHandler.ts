@@ -1,10 +1,13 @@
 import { Prisma } from '../../generated/prisma/client';
 import { NextFunction, Request, Response } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import AppError from '../errors/AppError';
 import handleZodError from '../errors/handleZodError';
 
-const handlePrismaValidationError = (err: Prisma.PrismaClientValidationError) => {
+const handlePrismaValidationError = (
+  err: Prisma.PrismaClientValidationError,
+) => {
   const rawMessage = err.message || 'Prisma validation error occurred.';
   let cleanMessage = 'Validation error in Prisma operation';
   let suggestion = '';
@@ -15,8 +18,10 @@ const handlePrismaValidationError = (err: Prisma.PrismaClientValidationError) =>
     cleanMessage = `Prisma error: The "${field}" field is required in the create/update query.`;
     suggestion = `Example: prisma.alert.create({ data: { ${field}: "Your value", ...otherFields } })`;
   } else if (rawMessage.includes('Argument `data` is missing')) {
-    cleanMessage = 'Prisma error: The "data" property is required in create/update queries.';
-    suggestion = 'Example: prisma.alert.create({ data: { title: "Your title", ... } })';
+    cleanMessage =
+      'Prisma error: The "data" property is required in create/update queries.';
+    suggestion =
+      'Example: prisma.alert.create({ data: { title: "Your title", ... } })';
   } else if (rawMessage.includes('Unknown arg')) {
     cleanMessage = 'Prisma error: You passed an invalid field to the query.';
     suggestion = 'Check your field names in the `data` object.';
@@ -52,13 +57,17 @@ const globalErrorHandler = (
   } else if (err?.code === 'P2003') {
     statusCode = 400;
     message = `Foreign key constraint failed on the field: ${err.meta?.field_name}`;
-    errorDetails = { code: err.code, field: err.meta?.field_name, model: err.meta?.modelName };
+    errorDetails = {
+      code: err.code,
+      field: err.meta?.field_name,
+      model: err.meta?.modelName,
+    };
   } else if (err?.code === 'P2011') {
     statusCode = 400;
     message = `Null constraint violation on the field: ${err.meta?.field_name}`;
     errorDetails = { code: err.code, field: err.meta?.field_name };
   } else if (err?.code === 'P2025') {
-    console.log(err)
+    console.log(err);
     statusCode = 404;
     message = `${err?.meta?.modelName} Not Found!!`;
     errorDetails = { code: err.code, cause: err.meta?.cause };
@@ -75,6 +84,17 @@ const globalErrorHandler = (
     statusCode = 500;
     message = err.message;
     errorDetails = err;
+  } else if (err instanceof MulterError) {
+    // e.g. LIMIT_FILE_SIZE, LIMIT_FILE_COUNT, LIMIT_UNEXPECTED_FILE
+    statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    // Multer reports both a wrong field name and "more files than maxCount" as LIMIT_UNEXPECTED_FILE
+    message =
+      err.code === 'LIMIT_UNEXPECTED_FILE'
+        ? `Unexpected file field '${err.field}' or too many files for it`
+        : err.field
+          ? `${err.message} (field: ${err.field})`
+          : err.message;
+    errorDetails = { code: err.code, field: err.field };
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
@@ -94,7 +114,7 @@ const globalErrorHandler = (
     success: false,
     message,
     errorDetails,
-    statusCode: statusCode
+    statusCode: statusCode,
   });
 };
 

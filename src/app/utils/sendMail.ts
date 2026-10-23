@@ -37,17 +37,19 @@ export const sendEmail = async (to: string, html: string, subject: string) => {
         pass: config.mail_password,
       },
     });
-    const result = await transporter.sendMail({
+    await transporter.sendMail({
       from: 'muhammadjunayetmaruf@gmail.com',
       to,
       subject,
-      text: '', 
+      text: '',
       html,
     });
-    console.log(result);
-  } catch (error) { }
+  } catch (error) {
+    console.error('[EMAIL] Failed to send email:', error);
+    // Re-throw so callers (sendOtp, register) can react to the failure
+    throw error;
+  }
 };
-
 
 export const sendOtpViaMail = async (to: string, OTP: string) => {
   const html = `<!DOCTYPE html>
@@ -78,10 +80,8 @@ export const sendOtpViaMail = async (to: string, OTP: string) => {
     </div>
 </body>
 </html>`;
-  await sendEmail(to, html, 'Quirpleb: Verification OTP')
-
-}
-
+  await sendEmail(to, html, 'Quirpleb: Verification OTP');
+};
 
 export const sendLinkViaMail = async (to: string, link: string) => {
   const html = `<!DOCTYPE html> 

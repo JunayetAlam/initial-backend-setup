@@ -1,5 +1,9 @@
 import httpStatus from 'http-status';
-import { User, UserRoleEnum, UserStatus } from '../../../generated/prisma/client';
+import {
+  User,
+  UserRoleEnum,
+  UserStatus,
+} from '../../../generated/prisma/client';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { prisma } from '../../utils/prisma';
 import { Request } from 'express';
@@ -9,13 +13,70 @@ import sendResponse from '../../utils/sendResponse';
 import { deleteFromMinIO, uploadToMinIO } from '../Upload/uploadToMinio';
 import { destroyAllUserSessions } from '../../utils/sessions';
 import { clearAuthCookies } from '../../utils/cookieOptions';
+import { isAdminRole } from '../../constant';
+import { AuthUser } from '../../interface';
+
+// Role hierarchy: SUPERADMIN manages ADMIN + USER accounts, ADMIN manages USER accounts only.
+const MANAGEABLE_ROLES: Record<UserRoleEnum, UserRoleEnum[]> = {
+  SUPERADMIN: [UserRoleEnum.ADMIN, UserRoleEnum.USER],
+  ADMIN: [UserRoleEnum.USER],
+  USER: [],
+};
+
+const canManageRole = (actorRole: UserRoleEnum, targetRole: UserRoleEnum) =>
+  MANAGEABLE_ROLES[actorRole].includes(targetRole);
+
+// Never expose credentials / tokens from admin user-management responses
+const managedUserSelect = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  role: true,
+  status: true,
+  isDeleted: true,
+} as const;
+
+/**
+ * Loads the target account and ensures the acting user may manage it.
+ */
+const getManageableUser = async (actor: AuthUser, targetId: string) => {
+  if (actor.id === targetId) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You cannot change your own role, status or account state',
+    );
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: targetId },
+    select: { id: true, role: true },
+  });
+  if (!target) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  if (!canManageRole(actor.role, target.role)) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      `You do not have permission to manage ${target.role} accounts`,
+    );
+  }
+
+  return target;
+};
 
 const getAllUsers = catchAsync(async (req, res) => {
   const user = req.user;
   const query: Record<string, unknown> = req.query;
 
-  if (user.role !== 'SUPERADMIN') {
+  if (!isAdminRole(user.role)) {
     query.isDeleted = false;
+  }
+
+  // Admins only see the accounts they are allowed to manage
+  if (user.role === UserRoleEnum.ADMIN) {
+    query.role = UserRoleEnum.USER;
   }
 
   const usersQuery = new QueryBuilder<typeof prisma.user>(prisma.user, query);
@@ -23,7 +84,7 @@ const getAllUsers = catchAsync(async (req, res) => {
     .search(['firstName', 'lastName', 'email'])
     .filter()
     .sort()
-    .customFields({
+    .select({
       id: true,
       firstName: true,
       lastName: true,
@@ -31,7 +92,12 @@ const getAllUsers = catchAsync(async (req, res) => {
       role: true,
       profilePhoto: true,
       loginWay: true,
-      ...(user.role === 'SUPERADMIN' && { isDeleted: true, createdAt: true, updatedAt: true, status: true, }),
+      ...(isAdminRole(user.role) && {
+        isDeleted: true,
+        createdAt: true,
+        updatedAt: true,
+        status: true,
+      }),
     })
     .exclude()
     .paginate()
@@ -40,7 +106,7 @@ const getAllUsers = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Users retrieved successfully',
-    ...result
+    ...result,
   });
 });
 
@@ -61,13 +127,32 @@ const getMyProfile = catchAsync(async (req, res) => {
 });
 
 const getUserDetails = catchAsync(async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const user = req.user;
+
+  // Users may only view themselves; ADMIN may view USER accounts; SUPERADMIN may view all.
+  if (user.id !== id) {
+    if (!isAdminRole(user.role)) {
+      throw new AppError(httpStatus.FORBIDDEN, 'Forbidden!');
+    }
+    if (user.role === UserRoleEnum.ADMIN) {
+      const target = await prisma.user.findUnique({
+        where: { id },
+        select: { role: true },
+      });
+      if (target && target.role !== UserRoleEnum.USER) {
+        throw new AppError(
+          httpStatus.FORBIDDEN,
+          `You do not have permission to view ${target.role} accounts`,
+        );
+      }
+    }
+  }
 
   const result = await prisma.user.findUniqueOrThrow({
     where: {
       id,
-      ...(user.role !== 'SUPERADMIN' && { isDeleted: false })
+      ...(!isAdminRole(user.role) && { isDeleted: false }),
     },
     select: {
       id: true,
@@ -77,7 +162,12 @@ const getUserDetails = catchAsync(async (req, res) => {
       role: true,
       profilePhoto: true,
       loginWay: true,
-      ...(user.role === 'SUPERADMIN' && { isDeleted: true, createdAt: true, updatedAt: true, status: true, }),
+      ...(isAdminRole(user.role) && {
+        isDeleted: true,
+        createdAt: true,
+        updatedAt: true,
+        status: true,
+      }),
     },
   });
 
@@ -95,9 +185,9 @@ const updateMyProfile = catchAsync(async (req: Request, res) => {
 
   const result = await prisma.user.update({
     where: {
-      id
+      id,
     },
-    data: payload
+    data: payload,
   });
 
   sendResponse(res, {
@@ -116,11 +206,11 @@ const updateProfileImage = catchAsync(async (req: Request, res) => {
     const location = await uploadToMinIO(file);
     const result = await prisma.user.update({
       where: {
-        id
+        id,
       },
       data: {
-        profilePhoto: location
-      }
+        profilePhoto: location,
+      },
     });
 
     if (previousImg) {
@@ -141,16 +231,19 @@ const updateProfileImage = catchAsync(async (req: Request, res) => {
 });
 
 const updateUserRoleStatus = catchAsync(async (req, res) => {
-  const { id } = req.params;
-  const role = req.body.role;
+  const { id } = req.params as { id: string };
+  const role = req.body.role as UserRoleEnum; // validated: USER | ADMIN
+
+  await getManageableUser(req.user, id);
 
   const result = await prisma.user.update({
     where: {
       id: id,
     },
     data: {
-      role: role
+      role: role,
     },
+    select: managedUserSelect,
   });
 
   sendResponse(res, {
@@ -161,20 +254,22 @@ const updateUserRoleStatus = catchAsync(async (req, res) => {
 });
 
 const updateUserStatus = catchAsync(async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
   const status = req.body.status;
+
+  await getManageableUser(req.user, id);
 
   const result = await prisma.user.update({
     where: {
-      id
+      id,
     },
     data: {
-      status
+      status,
     },
     select: {
       id: true,
       status: true,
-      role: true
+      role: true,
     },
   });
 
@@ -194,7 +289,7 @@ const deleteMyProfileFromDB = catchAsync(async (req, res) => {
 
   await prisma.user.update({
     where: {
-      id
+      id,
     },
     data: {
       isDeleted: true,
@@ -206,7 +301,7 @@ const deleteMyProfileFromDB = catchAsync(async (req, res) => {
       otpExpiry: null,
       passwordResetToken: null,
       passwordResetTokenExpires: null,
-    }
+    },
   });
 
   await destroyAllUserSessions(id);
@@ -220,13 +315,16 @@ const deleteMyProfileFromDB = catchAsync(async (req, res) => {
 });
 
 const undeletedUser = catchAsync(async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params as { id: string };
+
+  await getManageableUser(req.user, id);
 
   const result = await prisma.user.update({
     where: { id },
     data: {
       isDeleted: false,
-    }
+    },
+    select: managedUserSelect,
   });
 
   sendResponse(res, {
@@ -245,5 +343,5 @@ export const UserServices = {
   updateUserRoleStatus,
   updateUserStatus,
   deleteMyProfileFromDB,
-  undeletedUser
+  undeletedUser,
 };

@@ -9,17 +9,29 @@ import { html } from './htmldesign';
 import { firebaseLoginHtml } from './firebase-login.html';
 import config from './config';
 
+const allowedOrigins = new Set(config.client_origins);
+
+const isAllowedOrigin = (origin?: string) =>
+  !origin || allowedOrigins.has(origin.replace(/\/+$/, ''));
+
 const app: Application = express();
+
+// Needed behind a reverse proxy (nginx, Vercel) so req.ip and rate limiting see the real client IP.
+app.set('trust proxy', 1);
 
 app.use(
   cors({
-    origin: [
-      'http://localhost:3001',
-      'http://localhost:3000',
-      'http://172.252.13.78:3014',
-      'https://bretervin.tamshyah.com',
-    ],
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    optionsSuccessStatus: 200,
   }),
 );
 

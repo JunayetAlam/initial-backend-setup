@@ -1,0 +1,23 @@
+model UploadedFolder {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  // "<parentId|root>:<lowercased name>" — enforces case-insensitive unique names per
+  // parent, including at root level (where parentId is NULL and @@unique cannot help)
+  nameKey     String   @unique @map("name_key") @db.VarChar(150)
+  parentId    String?  @map("parent_id")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  parent     UploadedFolder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  subFolders UploadedFolder[] @relation("FolderHierarchy")
+  files      UploadedFile[]   @relation("FolderFiles")
+
+  createdBy  User? @relation("FolderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([parentId, name], name: "parent_folder_name_unique")
+  @@index([parentId])
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("uploaded_folders")
+}

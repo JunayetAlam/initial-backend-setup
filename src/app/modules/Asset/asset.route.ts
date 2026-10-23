@@ -5,55 +5,61 @@ import validateRequest from '../../middlewares/validateRequest';
 import { AssetValidation } from './asset.validation';
 import { uploadMiddleware } from '../Upload/upload.middleware';
 import { AssetServices } from './asset.service';
+import { UploadedFileRoutes } from '../UploadedFile/uploadedFile.route';
+import { UploadedFolderRoutes } from '../UploadedFolder/uploadedFolder.route';
 const router = express.Router();
+
+// Media library (file management): /assets/files, /assets/folders
+router.use('/files', UploadedFileRoutes);
+router.use('/folders', UploadedFolderRoutes);
+
+// `auth` always runs before `uploadMiddleware` so anonymous requests are
+// rejected before any file is buffered into memory.
 
 router.post(
   '/upload',
-  uploadMiddleware.single('file'),
   auth('ANY'),
-
-  AssetServices.upload
+  uploadMiddleware.single('file'),
+  AssetServices.upload,
 );
 
 router.post(
   '/upload-multiple',
-  uploadMiddleware.array('files'),
   auth('ANY'),
-
-  AssetServices.uploadMultiple
+  uploadMiddleware.array('files'),
+  AssetServices.uploadMultiple,
 );
 
 router.delete(
   '/delete',
   auth('ANY'),
   validateRequest.body(AssetValidation.deleteAssetSchema),
-  AssetServices.delete
+  AssetServices.delete,
 );
 
 router.delete(
   '/delete-multiple',
   auth('ANY'),
   validateRequest.body(AssetValidation.deleteMultipleAssetsSchema),
-  AssetServices.deleteMultiple
+  AssetServices.deleteMultiple,
 );
 
 router.put(
   '/update',
-  uploadMiddleware.single('file'),
   auth('ANY'),
+  uploadMiddleware.single('file'),
   parseBody,
   validateRequest.body(AssetValidation.updateAssetSchema),
-  AssetServices.update
+  AssetServices.update,
 );
 
 router.put(
   '/update-multiple',
-  uploadMiddleware.array('files'),
   auth('ANY'),
-
+  uploadMiddleware.array('files'),
   parseBody,
   validateRequest.body(AssetValidation.updateMultipleAssetsSchema),
-  AssetServices.updateMultiple
+  AssetServices.updateMultiple,
 );
 
 export const AssetRouters = router;

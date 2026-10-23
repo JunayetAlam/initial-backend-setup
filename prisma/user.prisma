@@ -33,7 +33,10 @@ model User {
   firebaseUid      String?
   firebaseProvider FirebaseProvider?
 
-  sessions  Session[]
+  sessions        Session[]
+  uploadedFiles   UploadedFile[]   @relation("FileUploadedBy")
+  uploadedFolders UploadedFolder[] @relation("FolderCreatedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -48,6 +51,7 @@ enum OTPFor {
 
 enum UserRoleEnum {
   USER
+  ADMIN
   SUPERADMIN
 }
 

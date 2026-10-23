@@ -1,10 +1,14 @@
 import { CookieOptions, Response } from 'express';
 import config from '../../config';
 
+// Driven by COOKIE_SECURE / COOKIE_SAMESITE / COOKIE_DOMAIN so the same build
+// works over plain HTTP (secure=false, lax) and HTTPS cross-site (secure, none).
 const baseCookieOptions: CookieOptions = {
   httpOnly: true,
-  secure: true,
-  sameSite: 'none',
+  secure: config.session.secure,
+  sameSite: config.session.same_site,
+  path: '/',
+  ...(config.session.domain && { domain: config.session.domain }),
 };
 
 const sessionCookieMaxAge = (createdAt: Date) => {
