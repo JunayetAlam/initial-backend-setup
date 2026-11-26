@@ -31,7 +31,21 @@ export class PrismaService
     super({
       adapter: new PrismaPg(pool),
       log: isDev ? ['error', 'warn'] : ['error'],
-      // Once a User model is added to schema.prisma, sensitive fields can be omitted here via `omit: { user: { ... } }`.
+      omit: {
+        user: {
+          password: true,
+          otp: true,
+          otpExpiry: true,
+          otpAttempts: true,
+          otpFor: true,
+          passwordResetToken: true,
+          passwordResetTokenExpires: true,
+          isEmailVerified: true,
+          emailVerificationToken: true,
+          emailVerificationTokenExpires: true,
+          isAgreeWithTerms: true,
+        },
+      },
     });
 
     this.pool = pool;
