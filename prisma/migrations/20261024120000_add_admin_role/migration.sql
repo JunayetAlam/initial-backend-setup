@@ -1,2 +1,0 @@
--- AlterEnum
-ALTER TYPE "UserRoleEnum" ADD VALUE 'ADMIN' BEFORE 'SUPERADMIN';
